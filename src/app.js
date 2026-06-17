@@ -329,14 +329,14 @@ function dashboard(){
              <b>${e((p.badge_number || p.badge || "#0000").trim?.() || "#0000")}</b>
              </div>
             <div class="profile-box">
-            <span>JABATAN</span>
-       <b>${e((p.jabatan || "BELUM SET").trim?.() || "BELUM SET")}</b>
-  </div>
-  <div class="profile-box">
-    <span>DIVISI</span>
-    <b>${e((p.divisi || "BELUM SET").trim?.() || "BELUM SET")}</b>
-  </div>
-</div>
+           <span>RANK</span>
+             <b>${e((p.rank_detail || "BELUM SET").trim?.() || "BELUM SET")}</b>
+          </div>
+            <div class="profile-box">
+           <span>DIVISI</span>
+             <b>${e((p.divisi || "BELUM SET").trim?.() || "BELUM SET")}</b>
+         </div>
+      </div>
           <p class="mini white-mini">Last login: ${fmt(p.last_login)} • Last seen: ${fmt(p.last_seen)}</p>
         </section>
 
