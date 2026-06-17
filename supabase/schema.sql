@@ -1,63 +1,18 @@
-create table if not exists profiles (
-  id bigint generated always as identity primary key,
-  auth_user_id uuid unique references auth.users(id) on delete cascade,
-  discord_id text,
-  display_name text not null,
-  avatar_url text,
-  badge_number text default '#0000',
-  jabatan text not null default 'CASIS',
-  divisi text not null default 'CASIS',
-  status text not null default 'PENDING',
-  prp int not null default 0,
-  created_at timestamptz default now()
-);
-create table if not exists bot_settings (
-  id bigint generated always as identity primary key,
-  guild_id text not null,
-  setting_key text not null,
-  setting_value text not null,
-  unique(guild_id, setting_key)
-);
-create table if not exists attendance (
-  id bigint generated always as identity primary key,
-  user_id bigint references profiles(id) on delete set null,
-  discord_id text,nama text,jabatan text,divisi text,type text not null,note text,evidence_url text,
-  status text not null default 'PENDING',approved_by text,discord_message_id text,discord_thread_id text,created_at timestamptz default now()
-);
-create table if not exists reports (
-  id bigint generated always as identity primary key,
-  user_id bigint references profiles(id) on delete set null,
-  type text not null,nama text,divisi text,payload jsonb,evidence_url text,status text not null default 'PENDING',approved_by text,created_at timestamptz default now()
-);
-create table if not exists disciplinary_records (
-  id bigint generated always as identity primary key,
-  target_user_id bigint references profiles(id) on delete set null,
-  target_name text,issued_by text,sp_level int not null,reason text not null,evidence_url text,status text not null default 'ACTIVE',created_at timestamptz default now()
-);
-create table if not exists payrolls (
-  id bigint generated always as identity primary key,
-  user_id bigint references profiles(id) on delete set null,
-  period text not null,amount int not null default 0,status text not null default 'PENDING',approved_by text,created_at timestamptz default now()
-);
-alter table profiles enable row level security;
-alter table attendance enable row level security;
-alter table reports enable row level security;
-alter table disciplinary_records enable row level security;
-alter table payrolls enable row level security;
-alter table bot_settings enable row level security;
-create policy "profiles_select" on profiles for select to authenticated using (true);
-create policy "profiles_insert" on profiles for insert to authenticated with check (auth.uid() = auth_user_id);
-create policy "profiles_update" on profiles for update to authenticated using (true);
-create policy "attendance_select" on attendance for select to authenticated using (true);
-create policy "attendance_insert" on attendance for insert to authenticated with check (true);
-create policy "attendance_update" on attendance for update to authenticated using (true);
-create policy "reports_select" on reports for select to authenticated using (true);
-create policy "reports_insert" on reports for insert to authenticated with check (true);
-create policy "reports_update" on reports for update to authenticated using (true);
-create policy "disciplinary_select" on disciplinary_records for select to authenticated using (true);
-create policy "disciplinary_insert" on disciplinary_records for insert to authenticated with check (true);
-create policy "payrolls_select" on payrolls for select to authenticated using (true);
-create policy "payrolls_insert" on payrolls for insert to authenticated with check (true);
-insert into storage.buckets (id, name, public) values ('evidence', 'evidence', true) on conflict (id) do nothing;
-create policy "evidence_read" on storage.objects for select using (bucket_id='evidence');
-create policy "evidence_upload" on storage.objects for insert to authenticated with check (bucket_id='evidence');
+create table if not exists profiles (id bigint generated always as identity primary key,auth_user_id uuid unique references auth.users(id) on delete cascade,discord_id text,display_name text not null,avatar_url text,badge_number text default '',jabatan text not null default 'CASIS',rank_detail text not null default 'CASIS',divisi text not null default 'CASIS',status text not null default 'PENDING',prp int not null default 0,created_at timestamptz default now(),updated_at timestamptz default now());
+create table if not exists bot_settings (id bigint generated always as identity primary key,guild_id text not null,setting_key text not null,setting_value text not null,created_at timestamptz default now(),updated_at timestamptz default now(),unique(guild_id,setting_key));
+create table if not exists attendance (id bigint generated always as identity primary key,user_id bigint references profiles(id) on delete set null,discord_id text,nama text,jabatan text,rank_detail text,divisi text,badge_number text,type text not null,location text,note text,evidence_url text,status text not null default 'PENDING',approved_by text,discord_message_id text,discord_thread_id text,created_at timestamptz default now());
+create table if not exists reports (id bigint generated always as identity primary key,user_id bigint references profiles(id) on delete set null,type text not null,nama text,divisi text,badge_number text,payload jsonb,evidence_url text,status text not null default 'PENDING',approved_by text,created_at timestamptz default now());
+create table if not exists disciplinary_records (id bigint generated always as identity primary key,target_user_id bigint references profiles(id) on delete set null,target_name text,issued_by text,sp_level int not null,reason text not null,evidence_url text,status text not null default 'ACTIVE',created_at timestamptz default now());
+create table if not exists payrolls (id bigint generated always as identity primary key,user_id bigint references profiles(id) on delete set null,nama text,period text not null,amount int not null default 0,note text,status text not null default 'PENDING',approved_by text,created_at timestamptz default now());
+create table if not exists handbook (id bigint generated always as identity primary key,divisi text not null default 'UMUM',category text not null default 'SOP',title text not null,content text not null,created_by text,created_at timestamptz default now());
+create table if not exists audit_logs (id bigint generated always as identity primary key,actor_user_id bigint,actor_name text,action text not null,target_type text,target_id text,metadata jsonb,created_at timestamptz default now());
+alter table profiles enable row level security; alter table bot_settings enable row level security; alter table attendance enable row level security; alter table reports enable row level security; alter table disciplinary_records enable row level security; alter table payrolls enable row level security; alter table handbook enable row level security; alter table audit_logs enable row level security;
+drop policy if exists profiles_select on profiles;drop policy if exists profiles_insert on profiles;drop policy if exists profiles_update on profiles;create policy profiles_select on profiles for select to authenticated using (true);create policy profiles_insert on profiles for insert to authenticated with check (auth.uid()=auth_user_id);create policy profiles_update on profiles for update to authenticated using (true);
+drop policy if exists attendance_select on attendance;drop policy if exists attendance_insert on attendance;drop policy if exists attendance_update on attendance;create policy attendance_select on attendance for select to authenticated using (true);create policy attendance_insert on attendance for insert to authenticated with check (true);create policy attendance_update on attendance for update to authenticated using (true);
+drop policy if exists reports_select on reports;drop policy if exists reports_insert on reports;drop policy if exists reports_update on reports;create policy reports_select on reports for select to authenticated using (true);create policy reports_insert on reports for insert to authenticated with check (true);create policy reports_update on reports for update to authenticated using (true);
+drop policy if exists disciplinary_select on disciplinary_records;drop policy if exists disciplinary_insert on disciplinary_records;create policy disciplinary_select on disciplinary_records for select to authenticated using (true);create policy disciplinary_insert on disciplinary_records for insert to authenticated with check (true);
+drop policy if exists payrolls_select on payrolls;drop policy if exists payrolls_insert on payrolls;drop policy if exists payrolls_update on payrolls;create policy payrolls_select on payrolls for select to authenticated using (true);create policy payrolls_insert on payrolls for insert to authenticated with check (true);create policy payrolls_update on payrolls for update to authenticated using (true);
+drop policy if exists handbook_select on handbook;drop policy if exists handbook_insert on handbook;create policy handbook_select on handbook for select to authenticated using (true);create policy handbook_insert on handbook for insert to authenticated with check (true);
+drop policy if exists audit_select on audit_logs;drop policy if exists audit_insert on audit_logs;create policy audit_select on audit_logs for select to authenticated using (true);create policy audit_insert on audit_logs for insert to authenticated with check (true);
+insert into storage.buckets (id,name,public) values ('evidence','evidence',true) on conflict (id) do nothing;drop policy if exists evidence_read on storage.objects;drop policy if exists evidence_upload on storage.objects;create policy evidence_read on storage.objects for select using (bucket_id='evidence');create policy evidence_upload on storage.objects for insert to authenticated with check (bucket_id='evidence');
+insert into handbook (divisi,category,title,content,created_by) values ('UMUM','SOP','SOP Dasar Personel','Utamakan komunikasi radio, patuhi komando, dan laporkan seluruh kegiatan melalui MDT.','SYSTEM'),('UMUM','TEN CODE','Ten Code Dasar','10-4 dimengerti, 10-8 onduty, 10-7 offduty, 10-20 lokasi.','SYSTEM'),('SABHARA','SOP','SOP Patroli Sabhara','Patroli wilayah, backup unit, dan respon gangguan keamanan.','SYSTEM'),('SATLANTAS','SOP','SOP Penilangan','Catat kendaraan, pelanggaran, bukti, dan masukkan laporan penilangan.','SYSTEM'),('BIDPROPAM','SOP','SOP Disiplin','SP diberikan bertahap: SP1, SP2, SP3, lalu PTDH jika diperlukan.','SYSTEM');

@@ -1,3 +1,5 @@
+import WebSocket from "ws";
+global.WebSocket = WebSocket;
 import "dotenv/config";
 import { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, SlashCommandBuilder, PermissionFlagsBits, ChannelType, REST, Routes } from "discord.js";
 import { createClient } from "@supabase/supabase-js";
