@@ -1,0 +1,25 @@
+{
+  "name": "mayday-police-mdt-v2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Mayday Police MDT - Cloudflare Pages, Workers, D1, R2, Discord Bot 24/7",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "worker:dev": "wrangler dev worker/index.js",
+    "worker:deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute mayday-police-mdt --file=database/schema.sql",
+    "bot": "node bot/src/index.js"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "vite": "^7.0.0",
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
