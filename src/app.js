@@ -323,11 +323,20 @@ function dashboard(){
               <h2 class="big-title">${e(p.display_name).toUpperCase()}</h2>
             </div>
           </div>
-          <div class="kv">
-            <div><small>BADGE</small><strong>${e((p.badge_number || p.badge || "#0000").trim?.() || "#0000")}</strong>
-            <div><small>JABATAN</small><strong>${e((p.jabatan || "BELUM SET").trim?.() || "BELUM SET")}</strong>
-            <div><small>DIVISI</small><strong>${e((p.divisi || "BELUM SET").trim?.() || "BELUM SET")}</strong>
-          </div>
+          <div class="profile-info">
+           <div class="profile-box">
+            <span>BADGE</span>
+             <b>${e((p.badge_number || p.badge || "#0000").trim?.() || "#0000")}</b>
+             </div>
+            <div class="profile-box">
+            <span>JABATAN</span>
+       <b>${e((p.jabatan || "BELUM SET").trim?.() || "BELUM SET")}</b>
+  </div>
+  <div class="profile-box">
+    <span>DIVISI</span>
+    <b>${e((p.divisi || "BELUM SET").trim?.() || "BELUM SET")}</b>
+  </div>
+</div>
           <p class="mini white-mini">Last login: ${fmt(p.last_login)} • Last seen: ${fmt(p.last_seen)}</p>
         </section>
 

@@ -679,3 +679,79 @@ textarea{
     font-size:8px!important;
   }
 }
+/* FINAL PROFILE LAYOUT FIX - pakai class baru, tidak bentrok dengan .kv lama */
+.profile-info{
+  display:grid !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  background:#fff !important;
+  border:4px solid #000 !important;
+  border-radius:18px !important;
+  overflow:hidden !important;
+  margin:16px 0 10px !important;
+  min-height:72px !important;
+  width:100% !important;
+}
+
+.profile-box{
+  display:flex !important;
+  flex-direction:column !important;
+  justify-content:center !important;
+  padding:13px 12px !important;
+  border-right:3px solid #cbd5e1 !important;
+  min-width:0 !important;
+  color:#020617 !important;
+}
+
+.profile-box:last-child{
+  border-right:0 !important;
+}
+
+.profile-box span{
+  display:block !important;
+  color:#475569 !important;
+  font-size:9px !important;
+  font-weight:1000 !important;
+  line-height:1 !important;
+  margin:0 0 7px 0 !important;
+  text-shadow:none !important;
+  text-transform:uppercase !important;
+}
+
+.profile-box b{
+  display:block !important;
+  color:#020617 !important;
+  font-size:12px !important;
+  font-weight:1000 !important;
+  line-height:1.15 !important;
+  text-shadow:none !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+}
+
+.profile-login{
+  display:block !important;
+  margin-top:8px !important;
+  color:#dbeafe !important;
+  font-size:11px !important;
+  font-weight:900 !important;
+  line-height:1.4 !important;
+}
+
+@media(max-width:560px){
+  .profile-info{
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  }
+
+  .profile-box{
+    padding:10px 8px !important;
+  }
+
+  .profile-box span{
+    font-size:8px !important;
+  }
+
+  .profile-box b{
+    font-size:10px !important;
+  }
+}
