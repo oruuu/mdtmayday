@@ -324,9 +324,9 @@ function dashboard(){
             </div>
           </div>
           <div class="kv">
-            <div><small>BADGE</small><strong>${e(p.badge_number || "#0000")}</strong></div>
-            <div><small>JABATAN</small><strong>${e(p.jabatan || "BELUM SET")}</strong></div>
-            <div><small>DIVISI</small><strong>${e(p.divisi || "BELUM SET")}</strong></div>
+            <div><small>BADGE</small><strong>${e((p.badge_number || p.badge || "#0000").trim?.() || "#0000")}</strong>
+            <div><small>JABATAN</small><strong>${e((p.jabatan || "BELUM SET").trim?.() || "BELUM SET")}</strong>
+            <div><small>DIVISI</small><strong>${e((p.divisi || "BELUM SET").trim?.() || "BELUM SET")}</strong>
           </div>
           <p class="mini white-mini">Last login: ${fmt(p.last_login)} • Last seen: ${fmt(p.last_seen)}</p>
         </section>
