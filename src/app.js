@@ -7,12 +7,15 @@ const S = {
   profile: null,
   page: "dashboard",
   tab: "today",
+  search: "",
   members: [],
   attendance: [],
   reports: [],
   propam: [],
   payrolls: [],
   audit: [],
+  roleHistory: [],
+  divisionHistory: [],
   currentReport: "PATROLI"
 };
 
@@ -46,6 +49,9 @@ const admin = () => can(MAN);
 const canApproveAttendance = () => can(ATTENDANCE_APPROVER);
 const propam = () => S.profile?.divisi === "BIDPROPAM" || can(["PATI","SUPER ADMIN"]);
 const fmt = d => d ? new Date(d).toLocaleString("id-ID") : "-";
+const monthKey = () => new Date().toISOString().slice(0,7);
+const onlineLimit = () => Date.now() - 5 * 60 * 1000;
+const isOnline = m => m.last_seen && new Date(m.last_seen).getTime() >= onlineLimit();
 
 async function init(){
   const { data } = await supabase.auth.getUser();
@@ -53,7 +59,9 @@ async function init(){
 
   if(S.user){
     await ensureProfile();
+    await markOnline(true);
     await loadAll();
+    setInterval(() => markOnline(false), 60_000);
   }
 
   render();
@@ -67,6 +75,7 @@ async function loginDiscord(){
 }
 
 async function logout(){
+  await markOnline(false, true);
   await supabase.auth.signOut();
   location.reload();
 }
@@ -94,24 +103,43 @@ async function ensureProfile(){
       jabatan: "CASIS",
       rank_detail: "CASIS",
       divisi: "CASIS",
-      status: "PENDING"
+      status: "PENDING",
+      last_login: new Date().toISOString(),
+      last_seen: new Date().toISOString()
     }).select("*").single();
 
     if(ins.error) throw ins.error;
     profile = ins.data;
+  } else {
+    await supabase.from("profiles").update({
+      last_login: new Date().toISOString(),
+      last_seen: new Date().toISOString()
+    }).eq("id", profile.id);
   }
 
   S.profile = profile;
 }
 
+async function markOnline(updateProfileState=false, offline=false){
+  if(!S.profile?.id) return;
+  const payload = {
+    last_seen: new Date().toISOString(),
+    online_status: offline ? "OFFLINE" : "ONLINE"
+  };
+  await supabase.from("profiles").update(payload).eq("id", S.profile.id);
+  if(updateProfileState) S.profile = { ...S.profile, ...payload };
+}
+
 async function loadAll(){
-  const [m,a,r,p,pay,au] = await Promise.all([
+  const [m,a,r,p,pay,au,rh,dh] = await Promise.all([
     supabase.from("profiles").select("*").order("created_at", { ascending:false }),
-    supabase.from("attendance").select("*").order("created_at", { ascending:false }).limit(250),
-    supabase.from("reports").select("*").order("created_at", { ascending:false }).limit(250),
-    supabase.from("disciplinary_records").select("*").order("created_at", { ascending:false }).limit(250),
-    supabase.from("payrolls").select("*").order("created_at", { ascending:false }).limit(250),
-    supabase.from("audit_logs").select("*").order("created_at", { ascending:false }).limit(150)
+    supabase.from("attendance").select("*").order("created_at", { ascending:false }).limit(400),
+    supabase.from("reports").select("*").order("created_at", { ascending:false }).limit(300),
+    supabase.from("disciplinary_records").select("*").order("created_at", { ascending:false }).limit(300),
+    supabase.from("payrolls").select("*").order("created_at", { ascending:false }).limit(300),
+    supabase.from("audit_logs").select("*").order("created_at", { ascending:false }).limit(250),
+    supabase.from("role_history").select("*").order("created_at", { ascending:false }).limit(300),
+    supabase.from("division_history").select("*").order("created_at", { ascending:false }).limit(300)
   ]);
 
   S.members = m.data || [];
@@ -120,6 +148,8 @@ async function loadAll(){
   S.propam = p.data || [];
   S.payrolls = pay.data || [];
   S.audit = au.data || [];
+  S.roleHistory = rh.data || [];
+  S.divisionHistory = dh.data || [];
 }
 
 async function audit(action, target_type, target_id, metadata = {}){
@@ -135,13 +165,34 @@ async function audit(action, target_type, target_id, metadata = {}){
   }catch{}
 }
 
-async function upload(file, folder){
+async function botEvent(event_type, payload = {}){
+  try{
+    await supabase.from("bot_events").insert({
+      event_type,
+      payload,
+      status: "PENDING"
+    });
+  }catch(err){
+    console.warn("bot event failed:", err.message);
+  }
+}
+
+async function uploadOne(file, folder){
   if(!file) return null;
   const ext = file.name.split(".").pop();
-  const path = `${folder}/${S.profile.id}-${Date.now()}.${ext}`;
+  const path = `${folder}/${S.profile.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
   const { error } = await supabase.storage.from("evidence").upload(path, file, { upsert:false });
   if(error) throw error;
   return supabase.storage.from("evidence").getPublicUrl(path).data.publicUrl;
+}
+
+async function uploadMany(files, folder){
+  const arr = Array.from(files || []);
+  const urls = [];
+  for(const file of arr){
+    urls.push(await uploadOne(file, folder));
+  }
+  return urls;
 }
 
 function top(title){
@@ -152,7 +203,7 @@ function top(title){
       <img src="/logo.png"/>
       <div>
         <h1>${title}</h1>
-        <small>MAYDAY POLICE MDT V2.1</small>
+        <small>MAYDAY POLICE MDT V2.2</small>
       </div>
     </div>
     <div class="top-actions">
@@ -184,6 +235,7 @@ function go(page){
   S.page = page;
   if(page === "attendance") S.tab = canApproveAttendance() ? "pending" : "form";
   else if(page === "admin") S.tab = "today";
+  else if(page === "members") S.tab = "list";
   else S.tab = "today";
   render();
 }
@@ -193,10 +245,23 @@ function setTab(tab){
   render();
 }
 
+function setSearch(v){
+  S.search = v;
+  render();
+}
+
+function filteredMembers(){
+  const q = S.search.trim().toLowerCase();
+  if(!q) return S.members;
+  return S.members.filter(m => [
+    m.display_name, m.badge_number, m.jabatan, m.rank_detail, m.divisi, m.status, m.discord_id
+  ].some(x => String(x || "").toLowerCase().includes(q)));
+}
+
 function loginPage(){
   return `<main class="app login-screen">
     <section class="login-frame">
-      <div class="login-head">OFFICIAL MDT V2.1</div>
+      <div class="login-head">OFFICIAL MDT V2.2</div>
       <img src="/logo.png" class="logo"/>
       <h2 class="big-title">MAYDAY<br><span style="color:#2563eb">POLICE</span></h2>
       <div class="badge">MOBILE DATA TERMINAL</div>
@@ -228,8 +293,8 @@ function pending(){
         </div>
 
         <div class="kv">
-          <div><small>JABATAN</small><strong>${e(p.jabatan)}</strong></div>
-          <div><small>DIVISI</small><strong>${e(p.divisi)}</strong></div>
+          <div><small>JABATAN</small><strong>${e(p.jabatan || "BELUM SET")}</strong></div>
+          <div><small>DIVISI</small><strong>${e(p.divisi || "BELUM SET")}</strong></div>
           <div><small>BADGE</small><strong>${e(p.badge_number || "BELUM ADA")}</strong></div>
         </div>
       </section>
@@ -240,8 +305,11 @@ function pending(){
 function dashboard(){
   const p = S.profile;
   const today = new Date().toISOString().slice(0,10);
+  const mkey = monthKey();
   const todayAbs = S.attendance.filter(x => (x.created_at || "").slice(0,10) === today);
+  const monthAbs = S.attendance.filter(x => (x.created_at || "").slice(0,7) === mkey);
   const pendingAbs = S.attendance.filter(x => x.status === "PENDING").length;
+  const online = S.members.filter(isOnline).length;
 
   return `<main class="app">
     ${top("PERSONNEL TERMINAL")}
@@ -256,22 +324,23 @@ function dashboard(){
             </div>
           </div>
           <div class="kv">
-            <div><small>BADGE</small><strong>${e(p.badge_number || "BELUM SET")}</strong></div>
-            <div><small>JABATAN</small><strong>${e(p.jabatan)}</strong></div>
-            <div><small>DIVISI</small><strong>${e(p.divisi)}</strong></div>
+            <div><small>BADGE</small><strong>${e(p.badge_number || "#0000")}</strong></div>
+            <div><small>JABATAN</small><strong>${e(p.jabatan || "BELUM SET")}</strong></div>
+            <div><small>DIVISI</small><strong>${e(p.divisi || "BELUM SET")}</strong></div>
           </div>
+          <p class="mini white-mini">Last login: ${fmt(p.last_login)} • Last seen: ${fmt(p.last_seen)}</p>
         </section>
 
         <section class="card yellow">
           <h2>COMMAND DASHBOARD</h2>
           <div class="grid3">
-            <div><small>ANGGOTA</small><h2>${S.members.filter(x => x.status === "ACTIVE").length}</h2></div>
+            <div><small>ONLINE</small><h2>${online}</h2></div>
             <div><small>PENDING USER</small><h2>${S.members.filter(x => x.status === "PENDING").length}</h2></div>
             <div><small>PENDING ABSENSI</small><h2>${pendingAbs}</h2></div>
           </div>
           <div class="grid3">
             <div><small>ABSENSI HARI INI</small><h2>${todayAbs.length}</h2></div>
-            <div><small>LAPORAN</small><h2>${S.reports.length}</h2></div>
+            <div><small>ABSENSI BULAN INI</small><h2>${monthAbs.length}</h2></div>
             <div><small>SP AKTIF</small><h2>${S.propam.filter(x => x.status === "ACTIVE").length}</h2></div>
           </div>
         </section>
@@ -279,17 +348,35 @@ function dashboard(){
 
       <section class="grid">
         <button class="tile" onclick="go('attendance')"><div class="icon">📋</div>ABSENSI<small>Input / ACC absensi</small></button>
-        <button class="tile" onclick="go('reports')"><div class="icon">📄</div>LAPORAN<small>OPS & administrasi</small></button>
-        <button class="tile" onclick="go('members')"><div class="icon">👮</div>PERSONEL<small>Data anggota</small></button>
+        <button class="tile" onclick="go('reports')"><div class="icon">📄</div>LAPORAN<small>OPS & export PDF</small></button>
+        <button class="tile" onclick="go('members')"><div class="icon">👮</div>PERSONEL<small>Online / search / riwayat</small></button>
         <button class="tile" onclick="go('propam')"><div class="icon">⚖️</div>PROPAM<small>SP / PTDH</small></button>
         <button class="tile" onclick="go('payroll')"><div class="icon">💵</div>PAYROLL<small>Pengajuan gaji</small></button>
         <button class="tile" onclick="go('log')"><div class="icon">↺</div>LOG<small>Activity log</small></button>
         ${high() ? `<button class="tile" onclick="go('admin')"><div class="icon">⚙</div>ADMIN<small>Panel petinggi</small></button>` : ""}
       </section>
 
+      ${leaderboardCard()}
       ${!p.badge_number ? `<section class="card red"><h2>BADGE BELUM DISET</h2><p>Badge bisa diedit oleh perwira/admin.</p></section>` : ""}
     </main>${nav()}
   </main>`;
+}
+
+function leaderboardCard(){
+  const mkey = monthKey();
+  const approved = S.attendance.filter(a => a.status === "APPROVED" && (a.created_at || "").slice(0,7) === mkey);
+  const map = {};
+  for(const a of approved){
+    const key = a.user_id || a.nama;
+    map[key] ??= { nama:a.nama || "Unknown", divisi:a.divisi || "-", total:0 };
+    map[key].total++;
+  }
+  const rows = Object.values(map).sort((a,b) => b.total - a.total).slice(0,10);
+
+  return `<section class="card">
+    <h2>LEADERBOARD ABSENSI BULAN INI</h2>
+    ${rows.length ? rows.map((r,i) => `<div class="leader-row"><b>#${i+1} ${e(r.nama)}</b><span>${e(r.divisi)} • ${r.total}x</span></div>`).join("") : `<div class="empty">Belum ada absensi approved bulan ini.</div>`}
+  </section>`;
 }
 
 function attendancePage(){
@@ -314,8 +401,8 @@ function attendanceForm(){
     <h2>FORM ABSENSI</h2>
     <div class="kv">
       <div><small>NAMA</small><strong>${e(p.display_name)}</strong></div>
-      <div><small>JABATAN</small><strong>${e(p.jabatan)}</strong></div>
-      <div><small>DIVISI</small><strong>${e(p.divisi)}</strong></div>
+      <div><small>JABATAN</small><strong>${e(p.jabatan || "-")}</strong></div>
+      <div><small>DIVISI</small><strong>${e(p.divisi || "-")}</strong></div>
     </div>
 
     <div class="row">
@@ -341,8 +428,8 @@ function attendanceForm(){
     </div>
 
     <div class="field">
-      <label>Bukti Foto</label>
-      <input id="abs_file" type="file" accept="image/*"/>
+      <label>Bukti Foto Bisa Lebih Dari 1</label>
+      <input id="abs_file" type="file" accept="image/*" multiple/>
     </div>
 
     <button class="btn blue" onclick="submitAttendance()">KIRIM ABSENSI</button>
@@ -384,8 +471,9 @@ function attendanceAdminPanel(){
           <td>
             ${e(r.note || "-")}<br>
             <span class="mini">${e(r.location || "")}</span>
+            ${r.approval_note ? `<br><span class="mini">ACC: ${e(r.approval_note)}</span>` : ""}
             ${r.reject_reason ? `<br><span class="mini">Alasan Tolak: ${e(r.reject_reason)}</span>` : ""}
-            ${r.evidence_url ? `<br><a href="${e(r.evidence_url)}" target="_blank">Lihat Bukti</a>` : ""}
+            ${renderEvidenceLinks(r)}
           </td>
           ${canApproveAttendance() ? `<td>
             ${r.status === "PENDING" ? `
@@ -399,11 +487,23 @@ function attendanceAdminPanel(){
   </section>`;
 }
 
+function getEvidenceList(r){
+  if(Array.isArray(r.evidence_urls) && r.evidence_urls.length) return r.evidence_urls;
+  if(r.evidence_url) return [r.evidence_url];
+  return [];
+}
+
+function renderEvidenceLinks(r){
+  const urls = getEvidenceList(r);
+  if(!urls.length) return "";
+  return `<div class="evidence-links">${urls.map((u,i)=>`<a href="${e(u)}" target="_blank">Bukti ${i+1}</a>`).join(" ")}</div>`;
+}
+
 async function submitAttendance(){
   try{
     const p = S.profile;
-    const file = document.querySelector("#abs_file").files[0];
-    const evidence = await upload(file, "attendance");
+    const files = document.querySelector("#abs_file").files;
+    const evidenceUrls = await uploadMany(files, "attendance");
 
     const item = {
       user_id: p.id,
@@ -416,7 +516,8 @@ async function submitAttendance(){
       type: document.querySelector("#abs_type").value,
       location: document.querySelector("#abs_location").value,
       note: document.querySelector("#abs_note").value || "-",
-      evidence_url: evidence,
+      evidence_url: evidenceUrls[0] || null,
+      evidence_urls: evidenceUrls,
       status: "PENDING"
     };
 
@@ -436,19 +537,31 @@ async function submitAttendance(){
 }
 
 async function approveAttendance(id){
+  const row = S.attendance.find(x => x.id === id);
+  const note = prompt("Keterangan ACC") || "Disetujui";
+
   const { error } = await supabase
     .from("attendance")
-    .update({ status:"APPROVED", approved_by:S.profile.display_name })
+    .update({ status:"APPROVED", approved_by:S.profile.display_name, approval_note:note })
     .eq("id", id);
 
   if(error) return alert(error.message);
 
-  await audit("APPROVE_ATTENDANCE", "attendance", id, {});
+  await audit("APPROVE_ATTENDANCE", "attendance", id, { note, row });
+  await botEvent("ATTENDANCE_APPROVED", {
+    id,
+    nama: row?.nama,
+    divisi: row?.divisi,
+    badge_number: row?.badge_number,
+    approved_by: S.profile.display_name,
+    note
+  });
   await loadAll();
   render();
 }
 
 async function rejectAttendance(id){
+  const row = S.attendance.find(x => x.id === id);
   const reason = prompt("Alasan ditolak?") || "Ditolak oleh admin";
 
   const { error } = await supabase
@@ -458,7 +571,15 @@ async function rejectAttendance(id){
 
   if(error) return alert(error.message);
 
-  await audit("REJECT_ATTENDANCE", "attendance", id, { reason });
+  await audit("REJECT_ATTENDANCE", "attendance", id, { reason, row });
+  await botEvent("ATTENDANCE_REJECTED", {
+    id,
+    nama: row?.nama,
+    divisi: row?.divisi,
+    badge_number: row?.badge_number,
+    approved_by: S.profile.display_name,
+    reason
+  });
   await loadAll();
   render();
 }
@@ -482,8 +603,18 @@ function reportsPage(){
         </div>
         <div class="field"><label>Kronologi</label><textarea id="rep_text"></textarea></div>
         <div class="field"><label>Video Link</label><input id="rep_video"/></div>
-        <div class="field"><label>Bukti Foto</label><input id="rep_file" type="file" accept="image/*"/></div>
+        <div class="field"><label>Bukti Foto Bisa Lebih Dari 1</label><input id="rep_file" type="file" accept="image/*" multiple/></div>
         <button class="btn blue" onclick="submitReport()">KIRIM LAPORAN</button>
+      </section>
+
+      <section class="card">
+        <h2>RIWAYAT LAPORAN</h2>
+        ${S.reports.slice(0,30).map(r=>`<div class="list-item">
+          <h3>${e(r.type)} - ${e(r.nama)}</h3>
+          <div class="mini">${fmt(r.created_at)} • ${e(r.status)}</div>
+          <p>${e(r.payload?.report || "-")}</p>
+          <button class="btn small" onclick="exportReportPDF(${r.id})">EXPORT PDF</button>
+        </div>`).join("") || `<div class="empty">Belum ada laporan.</div>`}
       </section>
     </main>${nav()}
   </main>`;
@@ -497,8 +628,8 @@ function setReportCat(c){
 async function submitReport(){
   try{
     const p = S.profile;
-    const file = document.querySelector("#rep_file").files[0];
-    const evidence = await upload(file, "reports");
+    const files = document.querySelector("#rep_file").files;
+    const evidenceUrls = await uploadMany(files, "reports");
 
     const payload = {
       location: document.querySelector("#rep_location").value,
@@ -514,13 +645,14 @@ async function submitReport(){
       divisi: p.divisi,
       badge_number: p.badge_number || "",
       payload,
-      evidence_url: evidence,
+      evidence_url: evidenceUrls[0] || null,
+      evidence_urls: evidenceUrls,
       status: "PENDING"
     });
 
     if(error) throw error;
 
-    await audit("CREATE_REPORT", "reports", "", { type:S.currentReport });
+    await audit("CREATE_REPORT", "reports", "", { type:S.currentReport, payload });
     await loadAll();
     alert("Laporan masuk.");
     go("log");
@@ -531,20 +663,129 @@ async function submitReport(){
   }
 }
 
+function exportReportPDF(id){
+  const r = S.reports.find(x => x.id === id);
+  if(!r) return alert("Laporan tidak ditemukan.");
+
+  const urls = getEvidenceList(r);
+  const html = `<!doctype html>
+<html>
+<head>
+  <title>Laporan ${e(r.type)} #${r.id}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:30px;color:#111}
+    h1{border-bottom:3px solid #000;padding-bottom:10px}
+    table{width:100%;border-collapse:collapse;margin-top:18px}
+    td,th{border:1px solid #000;padding:8px;text-align:left;vertical-align:top}
+    img{max-width:100%;margin:10px 0;border:2px solid #000}
+    .muted{color:#555}
+  </style>
+</head>
+<body>
+  <h1>MAYDAY POLICE - LAPORAN ${e(r.type)}</h1>
+  <p class="muted">Generated: ${fmt(new Date())}</p>
+  <table>
+    <tr><th>Nama</th><td>${e(r.nama)}</td></tr>
+    <tr><th>Badge</th><td>${e(r.badge_number || "NO BADGE")}</td></tr>
+    <tr><th>Divisi</th><td>${e(r.divisi)}</td></tr>
+    <tr><th>Status</th><td>${e(r.status)}</td></tr>
+    <tr><th>Lokasi</th><td>${e(r.payload?.location || "-")}</td></tr>
+    <tr><th>Shift</th><td>${e(r.payload?.shift || "-")}</td></tr>
+    <tr><th>Kronologi</th><td>${e(r.payload?.report || "-")}</td></tr>
+    <tr><th>Video</th><td>${e(r.payload?.video || "-")}</td></tr>
+    <tr><th>Waktu</th><td>${fmt(r.created_at)}</td></tr>
+  </table>
+  <h2>Bukti Visual</h2>
+  ${urls.length ? urls.map(u=>`<img src="${e(u)}"/>`).join("") : "<p>Tidak ada bukti.</p>"}
+  <script>window.print()</script>
+</body>
+</html>`;
+
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+}
+
 function membersPage(){
+  const rows = filteredMembers();
+
   return `<main class="app">
     ${top("DATA PERSONEL")}
     <main class="page">
       <section class="card">
-        <h2>ANGGOTA</h2>
-        ${S.members.map(m => `<div class="list-item">
-          <h3>${e(m.display_name)} <span class="status ${e(m.status)}">${e(m.status)}</span></h3>
-          <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan)} • ${e(m.divisi)}</div>
-          ${admin() ? `<button class="btn small yellow" onclick="openMemberEditor(${m.id})">EDIT USERNAME / BADGE / JABATAN</button>` : ""}
-        </div>`).join("")}
+        <h2>SEARCH ANGGOTA REALTIME</h2>
+        <input value="${e(S.search)}" oninput="setSearch(this.value)" placeholder="Cari nama / badge / divisi / jabatan..." />
+      </section>
+
+      <section class="card">
+        <h2>ANGGOTA ONLINE</h2>
+        ${S.members.filter(isOnline).map(m=>memberMini(m)).join("") || `<div class="empty">Belum ada anggota online.</div>`}
+      </section>
+
+      <section class="card">
+        <h2>DATA ANGGOTA</h2>
+        ${rows.map(m => memberMini(m, true)).join("") || `<div class="empty">Tidak ditemukan.</div>`}
       </section>
     </main>${nav()}
   </main>`;
+}
+
+function memberMini(m, showActions=false){
+  const monthTotal = S.attendance.filter(a => a.user_id === m.id && (a.created_at || "").slice(0,7) === monthKey()).length;
+  const spTotal = S.propam.filter(x => x.target_user_id === m.id).length;
+  return `<div class="list-item">
+    <h3>
+      <span class="online-dot ${isOnline(m) ? "on" : "off"}"></span>
+      ${e(m.display_name)}
+      <span class="status ${e(m.status)}">${e(m.status)}</span>
+    </h3>
+    <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan || "-")} • ${e(m.divisi || "-")}</div>
+    <div class="mini">Last login: ${fmt(m.last_login)} • Last seen: ${fmt(m.last_seen)}</div>
+    <div class="mini">Absensi bulan ini: ${monthTotal} • Riwayat SP: ${spTotal}</div>
+    ${showActions ? `<button class="btn small" onclick="openMemberDetail(${m.id})">DETAIL RIWAYAT</button>` : ""}
+    ${admin() && showActions ? `<button class="btn small yellow" onclick="openMemberEditor(${m.id})">EDIT USERNAME / BADGE / JABATAN</button>` : ""}
+  </div>`;
+}
+
+function openMemberDetail(id){
+  const m = S.members.find(x => x.id === id);
+  if(!m) return;
+
+  const roles = S.roleHistory.filter(x => x.user_id === id);
+  const divs = S.divisionHistory.filter(x => x.user_id === id);
+  const sps = S.propam.filter(x => x.target_user_id === id);
+  const abs = S.attendance.filter(x => x.user_id === id).slice(0,20);
+
+  const modal = document.createElement("div");
+  modal.id = "modal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto";
+
+  modal.innerHTML = `<section class="card" style="max-width:720px;width:100%">
+    <h2>DETAIL ANGGOTA</h2>
+    <div class="profile-head">
+      <img src="${e(m.avatar_url || "/logo.png")}"/>
+      <div>
+        <h2>${e(m.display_name)}</h2>
+        <p class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan)} • ${e(m.divisi)}</p>
+      </div>
+    </div>
+
+    <h3>Riwayat Jabatan</h3>
+    ${roles.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.old_jabatan || "-")} → ${e(x.new_jabatan || "-")} oleh ${e(x.changed_by || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+
+    <h3>Riwayat Mutasi Divisi</h3>
+    ${divs.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.old_divisi || "-")} → ${e(x.new_divisi || "-")} oleh ${e(x.changed_by || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+
+    <h3>Riwayat SP</h3>
+    ${sps.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${x.sp_level==99?"PTDH":"SP"+x.sp_level} - ${e(x.reason)} oleh ${e(x.issued_by)}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+
+    <h3>Absensi Terakhir</h3>
+    ${abs.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.type)} / ${e(x.status)} - ${e(x.note || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+
+    <button class="btn red" onclick="closeModal()">TUTUP</button>
+  </section>`;
+
+  document.body.appendChild(modal);
 }
 
 function propamPage(){
@@ -555,7 +796,7 @@ function propamPage(){
     <main class="page">
       <section class="card dark">
         <h2>SP / PTDH</h2>
-        <p class="notice">SP1 → SP2 → SP3 → PTDH.</p>
+        <p class="notice">SP1 → SP2 → SP3 → PTDH. SP bisa dihapus oleh BIDPROPAM/PATI/SUPER ADMIN.</p>
       </section>
 
       <section class="card">
@@ -579,21 +820,21 @@ function propamPage(){
         </div>
 
         <div class="field"><label>Alasan</label><textarea id="sp_reason"></textarea></div>
-        <div class="field"><label>Bukti</label><input id="sp_file" type="file" accept="image/*"/></div>
+        <div class="field"><label>Bukti Bisa Lebih Dari 1</label><input id="sp_file" type="file" accept="image/*" multiple/></div>
         <button class="btn red" onclick="submitSP()">KIRIM PROPAM LOG</button>
         <button class="btn" onclick="go('dashboard')">KELUAR KE MENU</button>
       </section>
 
       <section class="card">
-        <h2>RIWAYAT</h2>
+        <h2>RIWAYAT SP / PTDH</h2>
         ${S.propam.length ? `<table class="table">
-          <thead><tr><th>Target</th><th>Tindakan</th><th>Alasan</th><th>Oleh</th><th>Waktu</th></tr></thead>
+          <thead><tr><th>Target</th><th>Tindakan</th><th>Alasan</th><th>Oleh</th><th>Aksi</th></tr></thead>
           <tbody>${S.propam.map(x => `<tr>
             <td>${e(x.target_name)}</td>
             <td>${x.sp_level == 99 ? "PTDH" : "SP" + x.sp_level}</td>
-            <td>${e(x.reason)}</td>
-            <td>${e(x.issued_by)}</td>
-            <td>${fmt(x.created_at)}</td>
+            <td>${e(x.reason)}${renderEvidenceLinks(x)}</td>
+            <td>${e(x.issued_by)}<br><span class="mini">${fmt(x.created_at)}</span></td>
+            <td><button class="btn small red" onclick="deleteSP(${x.id})">HAPUS</button></td>
           </tr>`).join("")}</tbody>
         </table>` : `<div class="empty">Belum ada data.</div>`}
       </section>
@@ -606,8 +847,7 @@ async function submitSP(){
     const id = Number(document.querySelector("#sp_target").value);
     const target = S.members.find(m => m.id === id);
     const level = Number(document.querySelector("#sp_level").value);
-    const file = document.querySelector("#sp_file").files[0];
-    const evidence = await upload(file, "propam");
+    const evidenceUrls = await uploadMany(document.querySelector("#sp_file").files, "propam");
     const reason = document.querySelector("#sp_reason").value;
 
     const { error } = await supabase.from("disciplinary_records").insert({
@@ -616,7 +856,8 @@ async function submitSP(){
       issued_by: S.profile.display_name,
       sp_level: level,
       reason,
-      evidence_url: evidence,
+      evidence_url: evidenceUrls[0] || null,
+      evidence_urls: evidenceUrls,
       status: "ACTIVE"
     });
 
@@ -633,6 +874,17 @@ async function submitSP(){
   }catch(err){
     alert(err.message);
   }
+}
+
+async function deleteSP(id){
+  if(!confirm("Yakin hapus SP/PTDH ini? Data akan tercatat di audit log.")) return;
+  const row = S.propam.find(x => x.id === id);
+  const { error } = await supabase.from("disciplinary_records").delete().eq("id", id);
+  if(error) return alert(error.message);
+  await audit("DELETE_SP", "disciplinary_records", id, row || {});
+  await botEvent("SP_DELETED", { id, row, deleted_by:S.profile.display_name });
+  await loadAll();
+  render();
 }
 
 function payrollPage(){
@@ -701,7 +953,7 @@ async function rejectPayroll(id){
 }
 
 function logPage(){
-  const tabs = ["today","attendance","reports","propam","audit"];
+  const tabs = ["today","attendance","reports","propam","audit","leaderboard"];
 
   return `<main class="app">
     ${top("ACTIVITY LOG")}
@@ -719,6 +971,7 @@ function logPage(){
       ${S.tab === "reports" ? logTable("Laporan", S.reports, "reports") : ""}
       ${S.tab === "propam" ? logTable("Propam", S.propam, "propam") : ""}
       ${S.tab === "audit" ? auditLog() : ""}
+      ${S.tab === "leaderboard" ? leaderboardCard() : ""}
     </main>${nav()}
   </main>`;
 }
@@ -734,6 +987,7 @@ function logTable(title, rows, type){
           <th>Keterangan</th>
           <th>Waktu</th>
           ${type === "attendance" && canApproveAttendance() ? `<th>Aksi</th>` : ""}
+          ${type === "reports" ? `<th>Export</th>` : ""}
         </tr>
       </thead>
       <tbody>
@@ -746,8 +1000,9 @@ function logTable(title, rows, type){
           <td>
             ${e(r.note || r.reason || r.payload?.report || "-")}<br>
             <span class="mini">${e(r.location || r.payload?.location || "")}</span>
+            ${r.approval_note ? `<br><span class="mini">ACC: ${e(r.approval_note)}</span>` : ""}
             ${r.reject_reason ? `<br><span class="mini">Alasan Tolak: ${e(r.reject_reason)}</span>` : ""}
-            ${r.evidence_url ? `<br><a href="${e(r.evidence_url)}" target="_blank">Lihat Bukti</a>` : ""}
+            ${renderEvidenceLinks(r)}
           </td>
           <td>${fmt(r.created_at)}</td>
           ${type === "attendance" && canApproveAttendance() ? `<td>
@@ -756,6 +1011,7 @@ function logTable(title, rows, type){
               <button class="btn small red" onclick="rejectAttendance(${r.id})">TOLAK</button>
             ` : `<span class="mini">${e(r.approved_by || "-")}</span>`}
           </td>` : ""}
+          ${type === "reports" ? `<td><button class="btn small" onclick="exportReportPDF(${r.id})">PDF</button></td>` : ""}
         </tr>`).join("")}
       </tbody>
     </table>` : `<div class="empty">Kosong.</div>`}
@@ -764,10 +1020,11 @@ function logTable(title, rows, type){
 
 function auditLog(){
   return `<section class="card">
-    <h2>AUDIT</h2>
+    <h2>AUDIT LENGKAP</h2>
     ${S.audit.map(a => `<div class="list-item">
       <h3>${e(a.action)}</h3>
       <div class="mini">${e(a.actor_name)} • ${fmt(a.created_at)}</div>
+      <pre class="audit-pre">${e(JSON.stringify(a.metadata || {}, null, 2))}</pre>
     </div>`).join("") || `<div class="empty">Belum ada audit.</div>`}
   </section>`;
 }
@@ -784,6 +1041,7 @@ function adminPage(){
           ["members","ANGGOTA"],
           ["pending","PENDING USER"],
           ["attendance","ACC ABSENSI"],
+          ["badge","BADGE GEN"],
           ["settings","SETTING"]
         ].map(([id,label]) => `<button class="${S.tab===id ? "active" : ""}" onclick="setTab('${id}')">${label}</button>`).join("")}
       </section>
@@ -792,6 +1050,7 @@ function adminPage(){
       ${S.tab === "pending" ? pendingUsers() : ""}
       ${S.tab === "members" ? adminMembers() : ""}
       ${S.tab === "attendance" ? attendanceAdminPanel() : ""}
+      ${S.tab === "badge" ? badgeGeneratorPanel() : ""}
       ${S.tab === "settings" ? `<section class="card yellow"><h2>SETTING DISCORD</h2><p>Channel Discord diset lewat bot /setup.</p></section>` : ""}
     </main>${nav()}
   </main>`;
@@ -802,7 +1061,9 @@ function adminHome(){
     <button class="tile" onclick="setTab('pending')"><div class="icon">✅</div>ACC USER<small>${S.members.filter(m => m.status === "PENDING").length} pending</small></button>
     <button class="tile" onclick="setTab('members')"><div class="icon">🎖️</div>SET ANGGOTA<small>Username / badge / jabatan</small></button>
     <button class="tile" onclick="setTab('attendance')"><div class="icon">📋</div>ACC ABSENSI<small>${S.attendance.filter(a => a.status === "PENDING").length} pending</small></button>
+    <button class="tile" onclick="setTab('badge')"><div class="icon">#️⃣</div>BADGE GEN<small>Auto number</small></button>
     <button class="tile" onclick="go('propam')"><div class="icon">⚖️</div>PROPAM<small>SP / PTDH</small></button>
+    <button class="tile" onclick="go('members')"><div class="icon">🔍</div>SEARCH<small>Anggota realtime</small></button>
   </section>`;
 }
 
@@ -822,14 +1083,76 @@ function pendingUsers(){
 }
 
 function adminMembers(){
+  const rows = filteredMembers();
   return `<section class="card">
     <h2>KELOLA ANGGOTA</h2>
-    ${S.members.map(m => `<div class="list-item">
-      <h3>${e(m.display_name)} <span class="status ${e(m.status)}">${e(m.status)}</span></h3>
+    <input value="${e(S.search)}" oninput="setSearch(this.value)" placeholder="Cari anggota..."/>
+    ${rows.map(m => `<div class="list-item">
+      <h3><span class="online-dot ${isOnline(m) ? "on" : "off"}"></span>${e(m.display_name)} <span class="status ${e(m.status)}">${e(m.status)}</span></h3>
       <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan)} • ${e(m.divisi)}</div>
+      <button class="btn small" onclick="openMemberDetail(${m.id})">DETAIL</button>
       <button class="btn small yellow" onclick="openMemberEditor(${m.id})">EDIT</button>
-    </div>`).join("")}
+    </div>`).join("") || `<div class="empty">Tidak ditemukan.</div>`}
   </section>`;
+}
+
+function badgeGeneratorPanel(){
+  return `<section class="card">
+    <h2>BADGE GENERATOR OTOMATIS</h2>
+    <div class="row">
+      <div class="field"><label>Prefix</label><input id="badge_prefix" value="MDP"/></div>
+      <div class="field"><label>Mulai Nomor</label><input id="badge_start" type="number" value="1"/></div>
+    </div>
+    <div class="field">
+      <label>Target</label>
+      <select id="badge_target">
+        ${S.members.filter(m => !m.badge_number || m.badge_number === "#0000").map(m => `<option value="${m.id}">${e(m.display_name)} - ${e(m.divisi)}</option>`).join("")}
+      </select>
+    </div>
+    <button class="btn green" onclick="generateBadgeForSelected()">GENERATE UNTUK TARGET</button>
+    <button class="btn yellow" onclick="generateBadgeForAll()">GENERATE SEMUA YANG KOSONG</button>
+  </section>`;
+}
+
+function makeBadge(prefix, number){
+  return `${prefix}-${String(number).padStart(4, "0")}`;
+}
+
+function usedBadges(){
+  return new Set(S.members.map(m => m.badge_number).filter(Boolean));
+}
+
+function nextBadge(prefix, start){
+  const used = usedBadges();
+  let n = Number(start || 1);
+  while(used.has(makeBadge(prefix, n))) n++;
+  return makeBadge(prefix, n);
+}
+
+async function generateBadgeForSelected(){
+  const id = Number(document.querySelector("#badge_target").value);
+  const prefix = document.querySelector("#badge_prefix").value || "MDP";
+  const start = Number(document.querySelector("#badge_start").value || 1);
+  const badge = nextBadge(prefix, start);
+  await updateMemberWithHistory(id, { badge_number:badge }, "GENERATE_BADGE");
+  await loadAll();
+  alert(`Badge dibuat: ${badge}`);
+  render();
+}
+
+async function generateBadgeForAll(){
+  const prefix = document.querySelector("#badge_prefix").value || "MDP";
+  let start = Number(document.querySelector("#badge_start").value || 1);
+  const rows = S.members.filter(m => !m.badge_number || m.badge_number === "#0000");
+  for(const m of rows){
+    const badge = nextBadge(prefix, start);
+    await supabase.from("profiles").update({ badge_number:badge }).eq("id", m.id);
+    await audit("GENERATE_BADGE", "profiles", m.id, { badge_number:badge });
+    start++;
+    await loadAll();
+  }
+  alert(`Generate badge selesai: ${rows.length} anggota.`);
+  render();
 }
 
 function openMemberEditor(id){
@@ -859,6 +1182,34 @@ function closeModal(){
   document.getElementById("modal")?.remove();
 }
 
+async function updateMemberWithHistory(id, data, action="UPDATE_MEMBER"){
+  const old = S.members.find(x => x.id === id);
+  const { error } = await supabase.from("profiles").update(data).eq("id", id);
+  if(error) throw error;
+
+  if(old && data.jabatan && data.jabatan !== old.jabatan){
+    await supabase.from("role_history").insert({
+      user_id:id,
+      old_jabatan:old.jabatan,
+      new_jabatan:data.jabatan,
+      old_rank_detail:old.rank_detail,
+      new_rank_detail:data.rank_detail || old.rank_detail,
+      changed_by:S.profile.display_name
+    });
+  }
+
+  if(old && data.divisi && data.divisi !== old.divisi){
+    await supabase.from("division_history").insert({
+      user_id:id,
+      old_divisi:old.divisi,
+      new_divisi:data.divisi,
+      changed_by:S.profile.display_name
+    });
+  }
+
+  await audit(action, "profiles", id, { old, data });
+}
+
 async function saveMember(id){
   const data = {
     display_name: document.querySelector("#edit_name").value,
@@ -869,31 +1220,32 @@ async function saveMember(id){
     status: document.querySelector("#edit_status").value
   };
 
-  const { error } = await supabase.from("profiles").update(data).eq("id", id);
-  if(error) return alert(error.message);
-
-  await audit("UPDATE_MEMBER", "profiles", id, data);
-  closeModal();
-  await loadAll();
-  render();
+  try{
+    await updateMemberWithHistory(id, data, "UPDATE_MEMBER");
+    closeModal();
+    await loadAll();
+    render();
+  }catch(err){
+    alert(err.message);
+  }
 }
 
 async function approveUser(id){
-  await supabase.from("profiles").update({
+  await updateMemberWithHistory(id, {
     status:"ACTIVE",
     jabatan:"CASIS",
     rank_detail:"CASIS",
     divisi:"CASIS"
-  }).eq("id", id);
+  }, "APPROVE_USER");
 
-  await audit("APPROVE_USER", "profiles", id, {});
+  await botEvent("USER_APPROVED", { id, approved_by:S.profile.display_name });
   await loadAll();
   render();
 }
 
 async function rejectUser(id){
-  await supabase.from("profiles").update({ status:"REJECTED" }).eq("id", id);
-  await audit("REJECT_USER", "profiles", id, {});
+  await updateMemberWithHistory(id, { status:"REJECTED" }, "REJECT_USER");
+  await botEvent("USER_REJECTED", { id, rejected_by:S.profile.display_name });
   await loadAll();
   render();
 }
@@ -940,20 +1292,26 @@ Object.assign(window, {
   logout,
   go,
   setTab,
+  setSearch,
   submitAttendance,
   approveAttendance,
   rejectAttendance,
   setReportCat,
   submitReport,
+  exportReportPDF,
   submitSP,
+  deleteSP,
   submitPayroll,
   approvePayroll,
   rejectPayroll,
   openMemberEditor,
+  openMemberDetail,
   closeModal,
   saveMember,
   approveUser,
-  rejectUser
+  rejectUser,
+  generateBadgeForSelected,
+  generateBadgeForAll
 });
 
 init().catch(err => {
