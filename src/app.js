@@ -31,8 +31,8 @@ const RANK = [
   "Super Admin"
 ];
 
-const HIGH = ["PAMA","PAMEN","PATI","SUPER ADMIN"];
-const MAN = ["PAMEN","PATI","SUPER ADMIN"];
+const HIGH = ["PATI","SUPER ADMIN"];
+const MAN = ["PATI","SUPER ADMIN"];
 const ATTENDANCE_APPROVER = ["PATI","SUPER ADMIN"];
 
 const e = v => String(v ?? "").replace(/[&<>"']/g, m => ({
@@ -279,7 +279,7 @@ function pending(){
     <main class="page">
       <section class="card yellow">
         <h2>AKUN ${e(p.status)}</h2>
-        <p>Menunggu ACC PAMA/PAMEN/PATI/Admin.</p>
+        <p>Menunggu ACC PATI / SUPER ADMIN.</p>
         <button class="btn red" onclick="logout()">LOGOUT</button>
       </section>
 
@@ -546,6 +546,7 @@ async function submitAttendance(){
 }
 
 async function approveAttendance(id){
+  if(!canApproveAttendance()) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa ACC absensi.");
   const row = S.attendance.find(x => x.id === id);
   const note = prompt("Keterangan ACC") || "Disetujui";
 
@@ -570,6 +571,7 @@ async function approveAttendance(id){
 }
 
 async function rejectAttendance(id){
+  if(!canApproveAttendance()) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa menolak absensi.");
   const row = S.attendance.find(x => x.id === id);
   const reason = prompt("Alasan ditolak?") || "Ditolak oleh admin";
 
@@ -1240,6 +1242,7 @@ async function saveMember(id){
 }
 
 async function approveUser(id){
+  if(!can(["PATI","SUPER ADMIN"])) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa ACC user.");
   await updateMemberWithHistory(id, {
     status:"ACTIVE",
     jabatan:"CASIS",
@@ -1253,6 +1256,7 @@ async function approveUser(id){
 }
 
 async function rejectUser(id){
+  if(!can(["PATI","SUPER ADMIN"])) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa menolak user.");
   await updateMemberWithHistory(id, { status:"REJECTED" }, "REJECT_USER");
   await botEvent("USER_REJECTED", { id, rejected_by:S.profile.display_name });
   await loadAll();
