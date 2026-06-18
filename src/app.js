@@ -16,12 +16,7 @@ const S = {
   audit: [],
   roleHistory: [],
   divisionHistory: [],
-  currentReport: "PATROLI",
-  loading: false,
-  loadingText: "Memuat data MDT...",
-  realtimeReady: false,
-  notifications: [],
-  theme: localStorage.getItem("mayday_theme") || "light"
+  currentReport: "PATROLI"
 };
 
 const DIV = ["CASIS","SABHARA","SATBRIMOB","SATLANTAS","POLAIRUD","BARESKRIM","SETUM","BIDPROPAM"];
@@ -58,84 +53,7 @@ const monthKey = () => new Date().toISOString().slice(0,7);
 const onlineLimit = () => Date.now() - 5 * 60 * 1000;
 const isOnline = m => m.last_seen && new Date(m.last_seen).getTime() >= onlineLimit();
 
-const STATUS_LABEL = {
-  PENDING: "MENUNGGU VERIFIKASI",
-  ACTIVE: "TERVERIFIKASI",
-  SUSPENDED: "DIBEKUKAN",
-  PTDH: "PTDH",
-  REJECTED: "DITOLAK",
-  DELETED: "DIHAPUS"
-};
-
-function statusLabel(status){
-  return STATUS_LABEL[status] || status || "-";
-}
-
-function statusOptions(current){
-  return ["PENDING","ACTIVE","SUSPENDED","PTDH","REJECTED"].map(x =>
-    `<option value="${x}" ${current === x ? "selected" : ""}>${STATUS_LABEL[x]}</option>`
-  ).join("");
-}
-
-function canDeleteMember(){
-  return can(["PATI","SUPER ADMIN"]);
-}
-
-
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-function pageTitle(page = S.page){
-  const map = { dashboard:"Dashboard", attendance:"Absensi", log:"Activity Log", reports:"Laporan", propam:"Propam", payroll:"Payroll", admin:"Admin Panel", members:"Data Personel" };
-  return map[page] || "Mayday MDT";
-}
-
-function userDisplayName(p = S.profile){
-  return p?.discord_nickname || p?.server_nickname || p?.display_name || p?.discord_username || "Unknown";
-}
-
-function setTheme(theme){
-  S.theme = theme === "dark" ? "dark" : "light";
-  localStorage.setItem("mayday_theme", S.theme);
-  document.documentElement.dataset.theme = S.theme;
-  render();
-}
-function toggleTheme(){ setTheme(S.theme === "dark" ? "light" : "dark"); }
-function toast(message, type = "info"){
-  const id = Date.now() + Math.random();
-  S.notifications.push({ id, message, type });
-  drawToasts();
-  setTimeout(()=>{ S.notifications = S.notifications.filter(x => x.id !== id); drawToasts(); }, 3500);
-}
-function drawToasts(){
-  let box = document.querySelector("#toast-root");
-  if(!box){ box = document.createElement("div"); box.id = "toast-root"; document.body.appendChild(box); }
-  box.innerHTML = S.notifications.map(n => `<div class="toast ${e(n.type)}">${e(n.message)}</div>`).join("");
-}
-function loadingOverlay(){
-  return S.loading ? `<div class="loading-screen"><div class="loading-card"><img src="/logo.png"/><h2>MAYDAY MDT</h2><p>${e(S.loadingText || "Loading...")}</p><div class="loader-line"><span></span></div></div></div>` : "";
-}
-function skeletonPage(title = "MEMUAT"){
-  return `<main class="app">${top(title)}<main class="page"><section class="card skeleton-card"><div class="skeleton sk-title"></div><div class="skeleton sk-line"></div><div class="skeleton sk-line short"></div></section><section class="grid">${Array.from({length:6}).map(()=>`<div class="tile skeleton-tile"><div class="skeleton sk-icon"></div><div class="skeleton sk-line"></div></div>`).join("")}</section></main></main>`;
-}
-async function withLoading(text, fn){
-  try{ S.loading = true; S.loadingText = text || "Memproses..."; render(); await sleep(140); return await fn(); }
-  finally{ S.loading = false; }
-}
-function sidebar(){
-  if(!S.profile || S.profile.status !== "ACTIVE") return "";
-  const items = [["dashboard","🏠","Dashboard"],["attendance","📋","Absensi"],["log","↺","Activity Log"],["reports","📄","Laporan"],["members","👮","Personel"],["propam","⚖️","Propam"],["payroll","💵","Payroll"],...(high() ? [["admin","⚙","Admin"]] : [])];
-  return `<aside class="sidebar"><div class="sidebar-brand"><img src="/logo.png"/><div><b>MAYDAY MDT</b><span>Command Center</span></div></div><div class="sidebar-user"><img src="${e(S.profile.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName())}</b><span>${e(S.profile.rank_detail || S.profile.jabatan || "-")} • ${e(S.profile.divisi || "-")}</span></div></div><nav class="sidebar-nav">${items.map(([id,ic,tx])=>`<button class="${S.page===id ? "active" : ""}" onclick="go('${id}')"><span>${ic}</span>${tx}</button>`).join("")}</nav><div class="sidebar-footer"><button class="theme-toggle" onclick="toggleTheme()">${S.theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode"}</button><button class="theme-toggle" onclick="syncDiscord()">Sync Discord</button><button class="theme-toggle danger" onclick="logout()">Logout</button></div></aside>`;
-}
-function shell(content){
-  return `<div class="layout-shell ${S.theme === "dark" ? "dark-mode" : ""}">${sidebar()}<div class="layout-main page-anim">${content}</div>${loadingOverlay()}</div>`;
-}
-
-
 async function init(){
-  document.documentElement.dataset.theme = S.theme;
-  S.loading = true;
-  S.loadingText = "Membuka Mayday MDT...";
-  render();
   const { data } = await supabase.auth.getUser();
   S.user = data.user;
 
@@ -143,11 +61,9 @@ async function init(){
     await ensureProfile();
     await markOnline(true);
     await loadAll();
-    setupRealtimeWeb();
     setInterval(() => markOnline(false), 60_000);
   }
 
-  S.loading = false;
   render();
 }
 
@@ -182,8 +98,6 @@ async function ensureProfile(){
       auth_user_id: u.id,
       discord_id: did,
       display_name: meta.full_name || meta.name || u.email || "Unknown",
-      discord_username: meta.user_name || meta.preferred_username || meta.name || "",
-      discord_nickname: meta.full_name || meta.name || "",
       avatar_url: meta.avatar_url || "/logo.png",
       badge_number: "",
       jabatan: "CASIS",
@@ -198,8 +112,6 @@ async function ensureProfile(){
     profile = ins.data;
   } else {
     await supabase.from("profiles").update({
-      discord_username: meta.user_name || meta.preferred_username || profile.discord_username || "",
-      avatar_url: meta.avatar_url || profile.avatar_url || "/logo.png",
       last_login: new Date().toISOString(),
       last_seen: new Date().toISOString()
     }).eq("id", profile.id);
@@ -296,7 +208,6 @@ function top(title){
     </div>
     <div class="top-actions">
       ${exit}
-      ${p ? `<button class="exit-btn theme-mini" onclick="toggleTheme()">${S.theme === "dark" ? "☀️" : "🌙"}</button>` : ""}
       ${p ? `<img class="avatar" src="${e(p.avatar_url || "/logo.png")}"/>` : ""}
     </div>
   </header>`;
@@ -308,7 +219,6 @@ function nav(){
     ["attendance","📋","ABSENSI"],
     ["log","↺","LOG"],
     ["reports","📄","LAPORAN"],
-    ["members","👮","PERSONEL"],
     ["propam","⚖️","PROPAM"],
     ["payroll","💵","GAJI"],
     ["admin","⚙","ADMIN"]
@@ -322,18 +232,12 @@ function nav(){
 }
 
 function go(page){
-  S.loading = true;
-  S.loadingText = `Membuka ${pageTitle(page)}...`;
+  S.page = page;
+  if(page === "attendance") S.tab = canApproveAttendance() ? "pending" : "form";
+  else if(page === "admin") S.tab = "today";
+  else if(page === "members") S.tab = "list";
+  else S.tab = "today";
   render();
-  setTimeout(() => {
-    S.page = page;
-    if(page === "attendance") S.tab = canApproveAttendance() ? "pending" : "form";
-    else if(page === "admin") S.tab = "today";
-    else if(page === "members") S.tab = "list";
-    else S.tab = "today";
-    S.loading = false;
-    render();
-  }, 180);
 }
 
 function setTab(tab){
@@ -374,7 +278,7 @@ function pending(){
     ${top("ACCOUNT VERIFICATION")}
     <main class="page">
       <section class="card yellow">
-        <h2>AKUN ${e(statusLabel(p.status))}</h2>
+        <h2>AKUN ${e(p.status)}</h2>
         <p>Menunggu ACC PATI / SUPER ADMIN.</p>
         <button class="btn red" onclick="logout()">LOGOUT</button>
       </section>
@@ -383,8 +287,8 @@ function pending(){
         <div class="profile-head">
           <img src="${e(p.avatar_url || "/logo.png")}"/>
           <div>
-            <h2>${e(userDisplayName(p))}</h2>
-            <span class="status ${e(statusLabel(p.status))}">${e(statusLabel(p.status))}</span>
+            <h2>${e(p.display_name)}</h2>
+            <span class="status ${e(p.status)}">${e(p.status)}</span>
           </div>
         </div>
 
@@ -402,9 +306,10 @@ function dashboard(){
   const p = S.profile;
   const today = new Date().toISOString().slice(0,10);
   const mkey = monthKey();
-  const todayAbs = S.attendance.filter(x => (x.created_at || "").slice(0,10) === today);
-  const monthAbs = S.attendance.filter(x => (x.created_at || "").slice(0,7) === mkey);
-  const pendingAbs = S.attendance.filter(x => x.status === "PENDING").length;
+  const todayAbs = S.attendance.filter(x => (x.created_at || "").slice(0,10) === today && String(x.type || "").toUpperCase() === "ABSENSI");
+  const monthAbs = S.attendance.filter(x => (x.created_at || "").slice(0,7) === mkey && String(x.type || "").toUpperCase() === "ABSENSI");
+  const pendingAbs = S.attendance.filter(x => x.status === "PENDING" && String(x.type || "").toUpperCase() === "ABSENSI").length;
+  const pendingIzinCuti = S.attendance.filter(x => x.status === "PENDING" && ["IZIN","CUTI"].includes(String(x.type || "").toUpperCase())).length;
   const online = S.members.filter(isOnline).length;
 
   return `<main class="app">
@@ -416,7 +321,7 @@ function dashboard(){
             <img src="${e(p.avatar_url || "/logo.png")}"/>
             <div>
               <span class="badge">AKSES TERVERIFIKASI</span>
-              <h2 class="big-title">${e(userDisplayName(p)).toUpperCase()}</h2>
+              <h2 class="big-title">${e(p.display_name).toUpperCase()}</h2>
             </div>
           </div>
           <div class="profile-info">
@@ -446,7 +351,7 @@ function dashboard(){
           <div class="grid3">
             <div><small>ABSENSI HARI INI</small><h2>${todayAbs.length}</h2></div>
             <div><small>ABSENSI BULAN INI</small><h2>${monthAbs.length}</h2></div>
-            <div><small>SP AKTIF</small><h2>${S.propam.filter(x => x.status === "ACTIVE").length}</h2></div>
+            <div><small>IZIN/CUTI PENDING</small><h2>${pendingIzinCuti}</h2></div>
           </div>
         </section>
       </div>
@@ -461,9 +366,7 @@ function dashboard(){
         ${high() ? `<button class="tile" onclick="go('admin')"><div class="icon">⚙</div>ADMIN<small>Panel petinggi</small></button>` : ""}
       </section>
 
-      ${commandStatsCard()}
       ${leaderboardCard()}
-      ${liveMemberCard()}
       ${!p.badge_number ? `<section class="card red"><h2>BADGE BELUM DISET</h2><p>Badge bisa diedit oleh perwira/admin.</p></section>` : ""}
     </main>${nav()}
   </main>`;
@@ -484,36 +387,6 @@ function leaderboardCard(){
     <h2>LEADERBOARD ABSENSI BULAN INI</h2>
     ${rows.length ? rows.map((r,i) => `<div class="leader-row"><b>#${i+1} ${e(r.nama)}</b><span>${e(r.divisi)} • ${r.total}x</span></div>`).join("") : `<div class="empty">Belum ada absensi approved bulan ini.</div>`}
   </section>`;
-}
-
-
-function commandStatsCard(){
-  const divMap = {};
-  for(const m of S.members){ const key = m.divisi || "LAINNYA"; divMap[key] = (divMap[key] || 0) + 1; }
-  const max = Math.max(1, ...Object.values(divMap));
-  const rows = Object.entries(divMap).sort((a,b)=>b[1]-a[1]);
-  return `<section class="card command-panel"><div class="section-head"><div><h2>DASHBOARD PETINGGI</h2><p class="mini">Statistik anggota, divisi, absensi, laporan, dan pelanggaran.</p></div><button class="btn small" onclick="syncDiscord()">SYNC DISCORD</button></div><div class="stats-grid"><div><small>TOTAL ANGGOTA</small><b>${S.members.length}</b></div><div><small>TERVERIFIKASI</small><b>${S.members.filter(x=>x.status==="ACTIVE").length}</b></div><div><small>LAPORAN</small><b>${S.reports.length}</b></div><div><small>PAYROLL</small><b>${S.payrolls.filter(x=>x.status==="PENDING").length}</b></div></div><h3>STATISTIK DIVISI</h3><div class="chart-list">${rows.map(([name,total])=>`<div class="chart-row"><span>${e(name)}</span><div class="chart-track"><i style="width:${Math.max(8, Math.round((total/max)*100))}%"></i></div><b>${total}</b></div>`).join("") || `<div class="empty">Belum ada data divisi.</div>`}</div></section>`;
-}
-function liveMemberCard(){
-  const online = S.members.filter(isOnline).slice(0,12);
-  return `<section class="card"><div class="section-head"><div><h2>LIVE MEMBER</h2><p class="mini">Anggota yang aktif dalam 5 menit terakhir.</p></div><span class="status ACTIVE">${online.length} ONLINE</span></div><div class="live-grid">${online.map(m=>`<div class="live-member"><img src="${e(m.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName(m))}</b><span>${e(m.rank_detail || m.jabatan || "-")} • ${e(m.divisi || "-")}</span></div></div>`).join("") || `<div class="empty">Belum ada anggota online.</div>`}</div></section>`;
-}
-function setupRealtimeWeb(){
-  if(S.realtimeReady) return; S.realtimeReady = true;
-  const reloadAndToast = async msg => { await loadAll(); toast(msg, "success"); render(); };
-  supabase.channel("web-profiles-live").on("postgres_changes", { event:"*", schema:"public", table:"profiles" }, () => reloadAndToast("Data personel diperbarui")).subscribe();
-  supabase.channel("web-attendance-live").on("postgres_changes", { event:"*", schema:"public", table:"attendance" }, () => reloadAndToast("Data absensi diperbarui")).subscribe();
-  supabase.channel("web-reports-live").on("postgres_changes", { event:"*", schema:"public", table:"reports" }, () => reloadAndToast("Laporan baru masuk")).subscribe();
-  supabase.channel("web-propam-live").on("postgres_changes", { event:"*", schema:"public", table:"disciplinary_records" }, () => reloadAndToast("Data Propam diperbarui")).subscribe();
-  supabase.channel("web-payroll-live").on("postgres_changes", { event:"*", schema:"public", table:"payrolls" }, () => reloadAndToast("Payroll diperbarui")).subscribe();
-}
-async function syncDiscord(){
-  if(!S.profile?.discord_id) return toast("Discord ID belum tersedia.", "error");
-  await withLoading("Sinkronisasi Discord...", async () => {
-    await botEvent("SYNC_DISCORD_PROFILE", { profile_id:S.profile.id, discord_id:S.profile.discord_id, requested_by:userDisplayName() });
-    toast("Request sync Discord dikirim ke bot.", "success");
-  });
-  S.loading = false; render();
 }
 
 function attendancePage(){
@@ -545,18 +418,21 @@ function attendanceForm(){
     <div class="row">
       <div class="field">
         <label>Status Absensi</label>
-        <select id="abs_type">
-          <option>HADIR</option>
+        <select id="abs_type" onchange="renderAbsensiTypeHint(this.value)">
+          <option>ABSENSI</option>
           <option>IZIN</option>
           <option>CUTI</option>
-          <option>ONDUTY</option>
-          <option>OFFDUTY</option>
         </select>
       </div>
       <div class="field">
         <label>Lokasi</label>
         <input id="abs_location" placeholder="Kota Mayday / Kantor"/>
       </div>
+    </div>
+
+    <div id="abs_type_hint" class="type-hint absensi">
+      <b>ABSENSI</b>
+      <span>Untuk anggota yang hadir / duty dan menunggu ACC absensi.</span>
     </div>
 
     <div class="field">
@@ -573,6 +449,22 @@ function attendanceForm(){
   </section>`;
 }
 
+
+function renderAbsensiTypeHint(type){
+  const box = document.querySelector("#abs_type_hint");
+  if(!box) return;
+
+  const map = {
+    ABSENSI: ["type-hint absensi", "ABSENSI", "Untuk anggota yang hadir / duty dan menunggu ACC absensi."],
+    IZIN: ["type-hint izin", "IZIN", "Untuk pengajuan izin. Log ACC Discord digabung dengan CUTI."],
+    CUTI: ["type-hint cuti", "CUTI", "Untuk pengajuan cuti resmi. Log ACC Discord digabung dengan IZIN."]
+  };
+
+  const item = map[type] || map.ABSENSI;
+  box.className = item[0];
+  box.innerHTML = `<b>${item[1]}</b><span>${item[2]}</span>`;
+}
+
 function attendanceAdminPanel(){
   let rows = S.attendance;
 
@@ -581,13 +473,30 @@ function attendanceAdminPanel(){
   if(S.tab === "rejected") rows = rows.filter(x => x.status === "REJECTED");
   if(!canApproveAttendance()) rows = rows.filter(x => x.user_id === S.profile.id);
 
-  return `<section class="card">
-    <h2>${canApproveAttendance() ? "PANEL ACC / TOLAK ABSENSI" : "RIWAYAT ABSENSI"}</h2>
+  const absensiRows = rows.filter(x => String(x.type || "").toUpperCase() === "ABSENSI");
+  const izinCutiRows = rows.filter(x => ["IZIN","CUTI"].includes(String(x.type || "").toUpperCase()));
+
+  return `<section class="attendance-split">
+    ${attendanceTableBlock("ABSENSI", "absensi-block", absensiRows, "Log khusus ABSENSI / hadir duty")}
+    ${attendanceTableBlock("IZIN & CUTI", "izin-cuti-block", izinCutiRows, "Log gabungan pengajuan IZIN dan CUTI")}
+  </section>`;
+}
+
+function attendanceTableBlock(title, cls, rows, desc){
+  return `<section class="card ${cls}">
+    <div class="section-head">
+      <div>
+        <h2>${title}</h2>
+        <p class="mini">${desc}</p>
+      </div>
+      <span class="status PENDING">${rows.filter(x => x.status === "PENDING").length} PENDING</span>
+    </div>
 
     ${rows.length ? `<table class="table">
       <thead>
         <tr>
           <th>Anggota</th>
+          <th>Jenis</th>
           <th>Status</th>
           <th>Waktu</th>
           <th>Keterangan</th>
@@ -600,10 +509,8 @@ function attendanceAdminPanel(){
             <b>${e(r.nama)}</b><br>
             <span class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.divisi || "-")}</span>
           </td>
-          <td>
-            <span class="status ${e(statusLabel(r.status))}">${e(statusLabel(r.status))}</span><br>
-            <span class="mini">${e(r.type)}</span>
-          </td>
+          <td><span class="type-pill ${e(String(r.type || "").toLowerCase())}">${e(r.type || "-")}</span></td>
+          <td><span class="status ${e(r.status)}">${typeof statusLabel === "function" ? e(statusLabel(r.status)) : e(r.status)}</span></td>
           <td>${fmt(r.created_at)}</td>
           <td>
             ${e(r.note || "-")}<br>
@@ -620,7 +527,7 @@ function attendanceAdminPanel(){
           </td>` : ""}
         </tr>`).join("")}
       </tbody>
-    </table>` : `<div class="empty">Tidak ada data.</div>`}
+    </table>` : `<div class="empty">Tidak ada data ${title.toLowerCase()}.</div>`}
   </section>`;
 }
 
@@ -664,7 +571,7 @@ async function submitAttendance(){
     await audit("CREATE_ATTENDANCE", "attendance", "", item);
     await loadAll();
 
-    toast("Absensi masuk ke log dan menunggu ACC.", "success");
+    alert("Absensi masuk ke log dan menunggu ACC.");
     go("log");
     S.tab = "attendance";
     render();
@@ -691,6 +598,7 @@ async function approveAttendance(id){
     nama: row?.nama,
     divisi: row?.divisi,
     badge_number: row?.badge_number,
+    type: row?.type,
     approved_by: S.profile.display_name,
     note
   });
@@ -716,6 +624,7 @@ async function rejectAttendance(id){
     nama: row?.nama,
     divisi: row?.divisi,
     badge_number: row?.badge_number,
+    type: row?.type,
     approved_by: S.profile.display_name,
     reason
   });
@@ -750,7 +659,7 @@ function reportsPage(){
         <h2>RIWAYAT LAPORAN</h2>
         ${S.reports.slice(0,30).map(r=>`<div class="list-item">
           <h3>${e(r.type)} - ${e(r.nama)}</h3>
-          <div class="mini">${fmt(r.created_at)} • ${e(statusLabel(r.status))}</div>
+          <div class="mini">${fmt(r.created_at)} • ${e(r.status)}</div>
           <p>${e(r.payload?.report || "-")}</p>
           <button class="btn small" onclick="exportReportPDF(${r.id})">EXPORT PDF</button>
         </div>`).join("") || `<div class="empty">Belum ada laporan.</div>`}
@@ -793,7 +702,7 @@ async function submitReport(){
 
     await audit("CREATE_REPORT", "reports", "", { type:S.currentReport, payload });
     await loadAll();
-    toast("Laporan masuk.", "success");
+    alert("Laporan masuk.");
     go("log");
     S.tab = "reports";
     render();
@@ -827,7 +736,7 @@ function exportReportPDF(id){
     <tr><th>Nama</th><td>${e(r.nama)}</td></tr>
     <tr><th>Badge</th><td>${e(r.badge_number || "NO BADGE")}</td></tr>
     <tr><th>Divisi</th><td>${e(r.divisi)}</td></tr>
-    <tr><th>Status</th><td>${e(statusLabel(r.status))}</td></tr>
+    <tr><th>Status</th><td>${e(r.status)}</td></tr>
     <tr><th>Lokasi</th><td>${e(r.payload?.location || "-")}</td></tr>
     <tr><th>Shift</th><td>${e(r.payload?.shift || "-")}</td></tr>
     <tr><th>Kronologi</th><td>${e(r.payload?.report || "-")}</td></tr>
@@ -876,7 +785,7 @@ function memberMini(m, showActions=false){
     <h3>
       <span class="online-dot ${isOnline(m) ? "on" : "off"}"></span>
       ${e(m.display_name)}
-      <span class="status ${e(statusLabel(m.status))}">${e(statusLabel(m.status))}</span>
+      <span class="status ${e(m.status)}">${e(m.status)}</span>
     </h3>
     <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan || "-")} • ${e(m.divisi || "-")}</div>
     <div class="mini">Last login: ${fmt(m.last_login)} • Last seen: ${fmt(m.last_seen)}</div>
@@ -919,7 +828,7 @@ function openMemberDetail(id){
     ${sps.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${x.sp_level==99?"PTDH":"SP"+x.sp_level} - ${e(x.reason)} oleh ${e(x.issued_by)}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
 
     <h3>Absensi Terakhir</h3>
-    ${abs.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.type)} / ${e(statusLabel(x.status))} - ${e(x.note || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+    ${abs.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.type)} / ${e(x.status)} - ${e(x.note || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
 
     <button class="btn red" onclick="closeModal()">TUTUP</button>
   </section>`;
@@ -1008,7 +917,7 @@ async function submitSP(){
 
     await audit(level === 99 ? "PTDH" : "CREATE_SP", "disciplinary_records", id, { level, reason });
     await loadAll();
-    toast("Propam log tersimpan.", "success");
+    alert("Propam log tersimpan.");
     render();
   }catch(err){
     alert(err.message);
@@ -1033,7 +942,7 @@ function payrollPage(){
       <section class="card blue">
         <span class="badge">PAYROLL SYSTEM</span>
         <h2 class="big-title">GAJI</h2>
-        <p>${e(userDisplayName(S.profile))} • ${e(S.profile.badge_number || "NO BADGE")}</p>
+        <p>${e(S.profile.display_name)} • ${e(S.profile.badge_number || "NO BADGE")}</p>
       </section>
 
       <section class="card">
@@ -1135,7 +1044,7 @@ function logTable(title, rows, type){
             ${e(r.nama || r.target_name || r.type)}<br>
             <span class="mini">${e(r.divisi || r.badge_number || "")}</span>
           </td>
-          <td><span class="status ${e(statusLabel(r.status))}">${e(statusLabel(r.status))}</span></td>
+          <td><span class="status ${e(r.status)}">${e(r.status)}</span></td>
           <td>
             ${e(r.note || r.reason || r.payload?.report || "-")}<br>
             <span class="mini">${e(r.location || r.payload?.location || "")}</span>
@@ -1227,11 +1136,10 @@ function adminMembers(){
     <h2>KELOLA ANGGOTA</h2>
     <input value="${e(S.search)}" oninput="setSearch(this.value)" placeholder="Cari anggota..."/>
     ${rows.map(m => `<div class="list-item">
-      <h3><span class="online-dot ${isOnline(m) ? "on" : "off"}"></span>${e(m.display_name)} <span class="status ${e(statusLabel(m.status))}">${e(statusLabel(m.status))}</span></h3>
+      <h3><span class="online-dot ${isOnline(m) ? "on" : "off"}"></span>${e(m.display_name)} <span class="status ${e(m.status)}">${e(m.status)}</span></h3>
       <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan)} • ${e(m.divisi)}</div>
       <button class="btn small" onclick="openMemberDetail(${m.id})">DETAIL</button>
       <button class="btn small yellow" onclick="openMemberEditor(${m.id})">EDIT</button>
-      ${canDeleteMember() ? `<button class="btn small red" onclick="deleteMember(${m.id})">HAPUS</button>` : ""}
     </div>`).join("") || `<div class="empty">Tidak ditemukan.</div>`}
   </section>`;
 }
@@ -1276,7 +1184,7 @@ async function generateBadgeForSelected(){
   const badge = nextBadge(prefix, start);
   await updateMemberWithHistory(id, { badge_number:badge }, "GENERATE_BADGE");
   await loadAll();
-  toast(`Badge dibuat: ${badge}`, "success");
+  alert(`Badge dibuat: ${badge}`);
   render();
 }
 
@@ -1291,7 +1199,7 @@ async function generateBadgeForAll(){
     start++;
     await loadAll();
   }
-  toast(`Generate badge selesai: ${rows.length} anggota.`, "success");
+  alert(`Generate badge selesai: ${rows.length} anggota.`);
   render();
 }
 
@@ -1310,10 +1218,9 @@ function openMemberEditor(id){
     <div class="field"><label>Jabatan</label><select id="edit_jabatan">${JAB.map(x => `<option ${m.jabatan===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Rank Detail</label><select id="edit_rank">${RANK.map(x => `<option ${m.rank_detail===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Divisi</label><select id="edit_divisi">${DIV.map(x => `<option ${m.divisi===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
-    <div class="field"><label>Status</label><select id="edit_status">${statusOptions(m.status)}</select></div>
+    <div class="field"><label>Status</label><select id="edit_status">${["PENDING","ACTIVE","SUSPENDED","PTDH","REJECTED"].map(x => `<option ${m.status===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
     <button class="btn green" onclick="saveMember(${m.id})">SIMPAN</button>
-    ${canDeleteMember() ? `<button class="btn red danger-delete" onclick="deleteMember(${m.id})">HAPUS ANGGOTA</button>` : ""}
-    <button class="btn" onclick="closeModal()">BATAL</button>
+    <button class="btn red" onclick="closeModal()">BATAL</button>
   </section>`;
 
   document.body.appendChild(modal);
@@ -1393,55 +1300,6 @@ async function rejectUser(id){
   render();
 }
 
-
-async function deleteMember(id){
-  if(!canDeleteMember()) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa menghapus anggota.");
-
-  const target = S.members.find(x => x.id === id);
-  if(!target) return alert("Anggota tidak ditemukan.");
-
-  if(target.id === S.profile.id) return alert("Tidak bisa menghapus akun sendiri.");
-
-  if(target.jabatan === "SUPER ADMIN" && S.profile.jabatan !== "SUPER ADMIN"){
-    return alert("Hanya SUPER ADMIN yang bisa menghapus SUPER ADMIN.");
-  }
-
-  const reason = prompt(`Alasan menghapus anggota ${target.display_name}?`);
-  if(!reason || !reason.trim()) return alert("Alasan penghapusan wajib diisi.");
-
-  if(!confirm(`Yakin hapus anggota ${target.display_name}? Tindakan ini akan masuk audit log.`)) return;
-
-  try{
-    await audit("DELETE_MEMBER", "profiles", id, {
-      target,
-      deleted_by: S.profile.display_name,
-      reason
-    });
-
-    await botEvent("MEMBER_DELETED", {
-      id,
-      nama: target.display_name,
-      badge_number: target.badge_number || "NO BADGE",
-      divisi: target.divisi || "-",
-      jabatan: target.jabatan || "-",
-      rank_detail: target.rank_detail || "-",
-      deleted_by: S.profile.display_name,
-      reason
-    });
-
-    const { error } = await supabase.from("profiles").delete().eq("id", id);
-    if(error) throw error;
-
-    closeModal();
-    await loadAll();
-    toast("Anggota berhasil dihapus.", "success");
-    render();
-  }catch(err){
-    alert("Gagal hapus anggota: " + err.message);
-  }
-}
-
-
 function blocked(msg){
   return `<main class="app">
     ${top("ACCESS DENIED")}
@@ -1455,13 +1313,28 @@ function blocked(msg){
 }
 
 function render(){
-  if(!S.user){ app.innerHTML = loginPage() + loadingOverlay(); drawToasts(); return; }
-  if(!S.profile){ app.innerHTML = skeletonPage("MEMUAT PROFIL") + loadingOverlay(); drawToasts(); return; }
-  if(S.profile?.status !== "ACTIVE" && S.profile?.jabatan !== "SUPER ADMIN"){ app.innerHTML = pending() + loadingOverlay(); drawToasts(); return; }
-  const map = { dashboard, attendance:attendancePage, reports:reportsPage, members:membersPage, propam:propamPage, log:logPage, payroll:payrollPage, admin:adminPage };
-  const content = (map[S.page] || dashboard)();
-  app.innerHTML = shell(content);
-  drawToasts();
+  if(!S.user){
+    app.innerHTML = loginPage();
+    return;
+  }
+
+  if(S.profile?.status !== "ACTIVE" && S.profile?.jabatan !== "SUPER ADMIN"){
+    app.innerHTML = pending();
+    return;
+  }
+
+  const map = {
+    dashboard,
+    attendance: attendancePage,
+    reports: reportsPage,
+    members: membersPage,
+    propam: propamPage,
+    log: logPage,
+    payroll: payrollPage,
+    admin: adminPage
+  };
+
+  app.innerHTML = (map[S.page] || dashboard)();
 }
 
 Object.assign(window, {
@@ -1487,12 +1360,8 @@ Object.assign(window, {
   saveMember,
   approveUser,
   rejectUser,
-  deleteMember,
   generateBadgeForSelected,
-  generateBadgeForAll,
-  toggleTheme,
-  setTheme,
-  syncDiscord
+  generateBadgeForAll
 });
 
 init().catch(err => {
