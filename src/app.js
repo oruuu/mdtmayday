@@ -57,6 +57,67 @@ const fmt = d => d ? new Date(d).toLocaleString("id-ID") : "-";
 const monthKey = () => new Date().toISOString().slice(0,7);
 const onlineLimit = () => Date.now() - 5 * 60 * 1000;
 const isOnline = m => m.last_seen && new Date(m.last_seen).getTime() >= onlineLimit();
+const POINTS_PER_HOUR = 10;
+const PAYROLL_PER_POINT = 1000;
+const MIN_DUTY_MINUTES = 30;
+
+function money(v){
+  return new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", maximumFractionDigits:0 }).format(Number(v || 0));
+}
+function roundPoint(v){ return Math.round(Number(v || 0) * 100) / 100; }
+function dutyPointFromMinutes(minutes){ return roundPoint((Number(minutes || 0) / 60) * POINTS_PER_HOUR); }
+function payrollFromPoints(points){ return Math.round(Number(points || 0) * PAYROLL_PER_POINT); }
+function combineDateTime(date, time){
+  if(!date || !time) return null;
+  return new Date(`${date}T${time}:00`);
+}
+function calcDutyFromInputs(){
+  const sd = document.querySelector("#duty_start_date")?.value;
+  const st = document.querySelector("#duty_start_time")?.value;
+  const ed = document.querySelector("#duty_end_date")?.value;
+  const et = document.querySelector("#duty_end_time")?.value;
+  const start = combineDateTime(sd, st);
+  const end = combineDateTime(ed, et);
+  if(!start || !end || isNaN(start) || isNaN(end)) return null;
+  const minutes = Math.floor((end.getTime() - start.getTime()) / 60000);
+  const points = dutyPointFromMinutes(minutes);
+  const payroll = payrollFromPoints(points);
+  return { start, end, minutes, hours: Math.round((minutes / 60) * 100) / 100, points, payroll };
+}
+function updateDutyPreview(){
+  const type = document.querySelector("#abs_type")?.value || "ABSENSI";
+  const preview = document.querySelector("#duty_preview");
+  if(!preview) return;
+  if(type !== "ABSENSI"){ preview.innerHTML = ""; return; }
+  const d = calcDutyFromInputs();
+  if(!d){
+    preview.innerHTML = `<div class="payroll-preview warning-soft">Isi tanggal dan jam ONDUTY / OFFDUTY.</div>`;
+    return;
+  }
+  const valid = d.minutes >= MIN_DUTY_MINUTES;
+  preview.innerHTML = `<div class="payroll-preview ${valid ? "ok" : "bad"}">
+    <div><small>TOTAL DURASI</small><b>${d.minutes > 0 ? `${Math.floor(d.minutes/60)}j ${d.minutes%60}m` : "Tidak valid"}</b></div>
+    <div><small>TOTAL MENIT</small><b>${Math.max(0, d.minutes)}</b></div>
+    <div><small>POINT</small><b>${d.minutes > 0 ? d.points : 0}</b></div>
+    <div><small>ESTIMASI GAJI</small><b>${d.minutes > 0 ? money(d.payroll) : money(0)}</b></div>
+    ${valid ? "" : `<p>Minimal duty ${MIN_DUTY_MINUTES} menit.</p>`}
+  </div>`;
+}
+function refreshAbsensiFormMode(){
+  const type = document.querySelector("#abs_type")?.value || "ABSENSI";
+  const duty = document.querySelector("#duty_fields");
+  const izin = document.querySelector("#izin_fields");
+  const cuti = document.querySelector("#cuti_fields");
+  const lokasi = document.querySelector("#location_field");
+  const fileLabel = document.querySelector("#abs_file_label");
+  if(duty) duty.style.display = type === "ABSENSI" ? "block" : "none";
+  if(izin) izin.style.display = type === "IZIN" ? "block" : "none";
+  if(cuti) cuti.style.display = type === "CUTI" ? "block" : "none";
+  if(lokasi) lokasi.style.display = type === "ABSENSI" ? "block" : "none";
+  if(fileLabel) fileLabel.textContent = type === "ABSENSI" ? "Bukti Foto Wajib Bisa Lebih Dari 1" : "Bukti Foto Opsional Bisa Lebih Dari 1";
+  updateDutyPreview();
+}
+
 
 const STATUS_LABEL = {
   PENDING: "MENUNGGU VERIFIKASI",
@@ -231,6 +292,7 @@ async function loadAll(){
   ]);
 
   S.members = m.data || [];
+  if(S.profile?.id){ const freshProfile = S.members.find(x => x.id === S.profile.id); if(freshProfile) S.profile = { ...S.profile, ...freshProfile }; }
   S.attendance = a.data || [];
   S.reports = r.data || [];
   S.propam = p.data || [];
@@ -435,6 +497,10 @@ function dashboard(){
          </div>
       </div>
           <p class="mini white-mini">Last login: ${fmt(p.last_login)} • Last seen: ${fmt(p.last_seen)}</p>
+          <div class="payroll-mini">
+            <div><small>DUTY POINT</small><b>${Number(p.duty_points || 0)}</b></div>
+            <div><small>ESTIMASI GAJI</small><b>${money(p.pending_payroll || 0)}</b></div>
+          </div>
         </section>
 
         <section class="card yellow">
@@ -471,19 +537,9 @@ function dashboard(){
 }
 
 function leaderboardCard(){
-  const mkey = monthKey();
-  const approved = S.attendance.filter(a => a.status === "APPROVED" && (a.created_at || "").slice(0,7) === mkey);
-  const map = {};
-  for(const a of approved){
-    const key = a.user_id || a.nama;
-    map[key] ??= { nama:a.nama || "Unknown", divisi:a.divisi || "-", total:0 };
-    map[key].total++;
-  }
-  const rows = Object.values(map).sort((a,b) => b.total - a.total).slice(0,10);
-
-  return `<section class="card">
-    <h2>LEADERBOARD ABSENSI BULAN INI</h2>
-    ${rows.length ? rows.map((r,i) => `<div class="leader-row"><b>#${i+1} ${e(r.nama)}</b><span>${e(r.divisi)} • ${r.total}x</span></div>`).join("") : `<div class="empty">Belum ada absensi approved bulan ini.</div>`}
+  const rows = [...S.members].sort((a,b) => Number(b.duty_points || 0) - Number(a.duty_points || 0)).slice(0,10);
+  return `<section class="card"><h2>LEADERBOARD DUTY POINT</h2>
+    ${rows.some(r => Number(r.duty_points || 0) > 0) ? rows.map((r,i) => `<div class="leader-row"><b>#${i+1} ${e(userDisplayName(r))}</b><span>${e(r.divisi || "-")} • ${Number(r.duty_points || 0)} point • ${money(r.pending_payroll || 0)}</span></div>`).join("") : `<div class="empty">Belum ada duty point.</div>`}
   </section>`;
 }
 
@@ -537,71 +593,63 @@ function attendancePage(){
 function renderAbsensiTypeHint(type){
   const box = document.querySelector("#abs_type_hint");
   if(!box) return;
-
   const map = {
-    ABSENSI: {
-      cls: "type-hint absensi",
-      title: "ABSENSI",
-      text: "Untuk hadir bertugas / duty. Log ACC Discord masuk channel absensi."
-    },
-    IZIN: {
-      cls: "type-hint izin",
-      title: "IZIN",
-      text: "Untuk pengajuan izin. Log ACC Discord digabung dengan cuti."
-    },
-    CUTI: {
-      cls: "type-hint cuti",
-      title: "CUTI",
-      text: "Untuk pengajuan cuti resmi. Log ACC Discord digabung dengan izin."
-    }
+    ABSENSI:{cls:"type-hint absensi",title:"ABSENSI",text:"Isi ONDUTY dan OFFDUTY manual. Foto bukti wajib. Point masuk payroll setelah ACC."},
+    IZIN:{cls:"type-hint izin",title:"IZIN",text:"Isi tanggal izin dan alasan. Menunggu ACC admin / PATI."},
+    CUTI:{cls:"type-hint cuti",title:"CUTI",text:"Isi tanggal mulai sampai selesai cuti dan alasan. Menunggu ACC admin / PATI."}
   };
-
   const item = map[type] || map.ABSENSI;
   box.className = item.cls;
   box.innerHTML = `<b>${item.title}</b><span>${item.text}</span>`;
+  refreshAbsensiFormMode();
 }
 
 function attendanceForm(){
   const p = S.profile;
+  const today = new Date().toISOString().slice(0,10);
   return `<section class="card">
-    <h2>FORM ABSENSI</h2>
+    <h2>FORM ABSENSI / IZIN / CUTI</h2>
     <div class="kv">
-      <div><small>NAMA</small><strong>${e(p.display_name)}</strong></div>
-      <div><small>JABATAN</small><strong>${e(p.jabatan || "-")}</strong></div>
+      <div><small>NAMA</small><strong>${e(userDisplayName(p))}</strong></div>
+      <div><small>RANK</small><strong>${e(p.rank_detail || p.jabatan || "-")}</strong></div>
       <div><small>DIVISI</small><strong>${e(p.divisi || "-")}</strong></div>
     </div>
-
     <div class="row">
       <div class="field">
-        <label>Status Absensi</label>
+        <label>Jenis Pengajuan</label>
         <select id="abs_type" onchange="renderAbsensiTypeHint(this.value)">
-          <option>ABSENSI</option>
-          <option>IZIN</option>
-          <option>CUTI</option>
+          <option>ABSENSI</option><option>IZIN</option><option>CUTI</option>
         </select>
       </div>
-      <div class="field">
-        <label>Lokasi</label>
-        <input id="abs_location" placeholder="Kota Mayday / Kantor"/>
+      <div class="field" id="location_field"><label>Lokasi Duty</label><input id="abs_location" placeholder="Kota Mayday / Kantor"/></div>
+    </div>
+    <div id="abs_type_hint" class="type-hint absensi"><b>ABSENSI</b><span>Isi ONDUTY dan OFFDUTY manual. Foto bukti wajib. Point masuk payroll setelah ACC.</span></div>
+    <div id="duty_fields" class="form-window absensi-window">
+      <h3>DATA DUTY</h3>
+      <div class="row">
+        <div class="field"><label>Tanggal ONDUTY</label><input id="duty_start_date" type="date" value="${today}" onchange="updateDutyPreview()"/></div>
+        <div class="field"><label>Jam ONDUTY</label><input id="duty_start_time" type="time" onchange="updateDutyPreview()"/></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Tanggal OFFDUTY</label><input id="duty_end_date" type="date" value="${today}" onchange="updateDutyPreview()"/></div>
+        <div class="field"><label>Jam OFFDUTY</label><input id="duty_end_time" type="time" onchange="updateDutyPreview()"/></div>
+      </div>
+      <div id="duty_preview"></div>
+    </div>
+    <div id="izin_fields" class="form-window izin-window" style="display:none">
+      <h3>DATA IZIN</h3>
+      <div class="field"><label>Tanggal Izin</label><input id="izin_date" type="date" value="${today}"/></div>
+    </div>
+    <div id="cuti_fields" class="form-window cuti-window" style="display:none">
+      <h3>DATA CUTI</h3>
+      <div class="row">
+        <div class="field"><label>Tanggal Mulai Cuti</label><input id="cuti_start_date" type="date" value="${today}"/></div>
+        <div class="field"><label>Tanggal Selesai Cuti</label><input id="cuti_end_date" type="date" value="${today}"/></div>
       </div>
     </div>
-
-    <div id="abs_type_hint" class="type-hint absensi">
-      <b>ABSENSI</b>
-      <span>Untuk hadir bertugas / duty. Log ACC Discord masuk channel absensi.</span>
-    </div>
-
-    <div class="field">
-      <label>Keterangan</label>
-      <textarea id="abs_note" placeholder="Contoh: Hadir patroli area kota / izin sebentar..."></textarea>
-    </div>
-
-    <div class="field">
-      <label>Bukti Foto Bisa Lebih Dari 1</label>
-      <input id="abs_file" type="file" accept="image/*" multiple/>
-    </div>
-
-    <button class="btn blue" onclick="submitAttendance()">KIRIM ABSENSI</button>
+    <div class="field"><label>Keterangan / Alasan</label><textarea id="abs_note" placeholder="Absensi: keterangan duty. Izin/Cuti: alasan pengajuan."></textarea></div>
+    <div class="field"><label id="abs_file_label">Bukti Foto Wajib Bisa Lebih Dari 1</label><input id="abs_file" type="file" accept="image/*" multiple/></div>
+    <button class="btn blue" onclick="submitAttendance()">KIRIM PENGAJUAN</button>
   </section>`;
 }
 
@@ -624,50 +672,22 @@ function attendanceAdminPanel(){
 
 function attendanceTableBlock(title, cls, rows, desc){
   return `<section class="card ${cls}">
-    <div class="section-head">
-      <div>
-        <h2>${title}</h2>
-        <p class="mini">${desc}</p>
-      </div>
-      <span class="status PENDING">${rows.filter(x => x.status === "PENDING").length} PENDING</span>
-    </div>
-
-    ${rows.length ? `<table class="table">
-      <thead>
-        <tr>
-          <th>Anggota</th>
-          <th>Jenis</th>
-          <th>Status</th>
-          <th>Waktu</th>
-          <th>Keterangan</th>
-          ${canApproveAttendance() ? `<th>Aksi</th>` : ""}
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(r => `<tr>
-          <td>
-            <b>${e(r.nama)}</b><br>
-            <span class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.divisi || "-")}</span>
-          </td>
+    <div class="section-head"><div><h2>${title}</h2><p class="mini">${desc}</p></div><span class="status PENDING">${rows.filter(x => x.status === "PENDING").length} PENDING</span></div>
+    ${rows.length ? `<table class="table"><thead><tr><th>Anggota</th><th>Jenis</th><th>Status</th><th>Detail</th><th>Keterangan</th>${canApproveAttendance() ? `<th>Aksi</th>` : ""}</tr></thead><tbody>
+      ${rows.map(r => {
+        const kind = String(r.type || "").toUpperCase();
+        const detail = kind === "ABSENSI"
+          ? `ONDUTY: ${fmt(r.duty_start_at)}<br>OFFDUTY: ${fmt(r.duty_end_at)}<br><b>${Number(r.total_minutes || 0)} menit • ${Number(r.total_points || 0)} point</b><br>${money(r.payroll_value || 0)}`
+          : kind === "IZIN" ? `Tanggal izin: <b>${e(r.leave_start_date || "-")}</b>` : `Mulai: <b>${e(r.leave_start_date || "-")}</b><br>Selesai: <b>${e(r.leave_end_date || "-")}</b>`;
+        return `<tr>
+          <td><b>${e(r.nama)}</b><br><span class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.divisi || "-")}</span></td>
           <td><span class="type-pill ${e(String(r.type || "").toLowerCase())}">${e(r.type || "-")}</span></td>
           <td><span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span></td>
-          <td>${fmt(r.created_at)}</td>
-          <td>
-            ${e(r.note || "-")}<br>
-            <span class="mini">${e(r.location || "")}</span>
-            ${r.approval_note ? `<br><span class="mini">ACC: ${e(r.approval_note)}</span>` : ""}
-            ${r.reject_reason ? `<br><span class="mini">Alasan Tolak: ${e(r.reject_reason)}</span>` : ""}
-            ${renderEvidenceLinks(r)}
-          </td>
-          ${canApproveAttendance() ? `<td>
-            ${r.status === "PENDING" ? `
-              <button class="btn small green" onclick="approveAttendance(${r.id})">ACC</button>
-              <button class="btn small red" onclick="rejectAttendance(${r.id})">TOLAK</button>
-            ` : `<span class="mini">oleh ${e(r.approved_by || "-")}</span>`}
-          </td>` : ""}
-        </tr>`).join("")}
-      </tbody>
-    </table>` : `<div class="empty">Tidak ada data ${title.toLowerCase()}.</div>`}
+          <td><span class="mini">${detail}</span></td>
+          <td>${e(r.note || "-")}<br>${r.location ? `<span class="mini">${e(r.location)}</span>` : ""}${r.approval_note ? `<br><span class="mini">ACC: ${e(r.approval_note)}</span>` : ""}${r.reject_reason ? `<br><span class="mini">Alasan Tolak: ${e(r.reject_reason)}</span>` : ""}${renderEvidenceLinks(r)}</td>
+          ${canApproveAttendance() ? `<td>${r.status === "PENDING" ? `<button class="btn small green" onclick="approveAttendance(${r.id})">ACC</button><button class="btn small red" onclick="rejectAttendance(${r.id})">TOLAK</button>` : `<span class="mini">oleh ${e(r.approved_by || "-")}</span>`}</td>` : ""}
+        </tr>`;
+      }).join("")}</tbody></table>` : `<div class="empty">Tidak ada data ${title.toLowerCase()}.</div>`}
   </section>`;
 }
 
@@ -686,63 +706,93 @@ function renderEvidenceLinks(r){
 async function submitAttendance(){
   try{
     const p = S.profile;
+    const type = document.querySelector("#abs_type").value;
     const files = document.querySelector("#abs_file").files;
+    const note = document.querySelector("#abs_note").value || "-";
+    if(type === "ABSENSI" && (!files || files.length < 1)) return alert("Absensi wajib upload minimal 1 foto bukti.");
+    if(["IZIN","CUTI"].includes(type) && !note.trim()) return alert("Alasan izin/cuti wajib diisi.");
+
+    let dutyData = {};
+    let leaveData = {};
+
+    if(type === "ABSENSI"){
+      const d = calcDutyFromInputs();
+      if(!d) return alert("Tanggal dan jam ONDUTY / OFFDUTY wajib diisi.");
+      if(d.minutes < MIN_DUTY_MINUTES) return alert(`Minimal duty ${MIN_DUTY_MINUTES} menit.`);
+      dutyData = {
+        duty_start_date: document.querySelector("#duty_start_date").value,
+        duty_start_time: document.querySelector("#duty_start_time").value,
+        duty_end_date: document.querySelector("#duty_end_date").value,
+        duty_end_time: document.querySelector("#duty_end_time").value,
+        duty_start_at: d.start.toISOString(),
+        duty_end_at: d.end.toISOString(),
+        total_minutes: d.minutes,
+        total_hours: d.hours,
+        total_points: d.points,
+        payroll_value: d.payroll
+      };
+    }
+
+    if(type === "IZIN"){
+      const izinDate = document.querySelector("#izin_date").value;
+      if(!izinDate) return alert("Tanggal izin wajib diisi.");
+      leaveData = { leave_start_date: izinDate, leave_end_date: izinDate };
+    }
+
+    if(type === "CUTI"){
+      const start = document.querySelector("#cuti_start_date").value;
+      const end = document.querySelector("#cuti_end_date").value;
+      if(!start || !end) return alert("Tanggal mulai dan selesai cuti wajib diisi.");
+      if(new Date(end) < new Date(start)) return alert("Tanggal selesai cuti tidak boleh sebelum tanggal mulai.");
+      leaveData = { leave_start_date: start, leave_end_date: end };
+    }
+
     const evidenceUrls = await uploadMany(files, "attendance");
-
     const item = {
-      user_id: p.id,
-      discord_id: p.discord_id,
-      nama: p.display_name,
-      jabatan: p.jabatan,
-      rank_detail: p.rank_detail,
-      divisi: p.divisi,
-      badge_number: p.badge_number || "",
-      type: document.querySelector("#abs_type").value === "HADIR" ? "ABSENSI" : document.querySelector("#abs_type").value,
-      location: document.querySelector("#abs_location").value,
-      note: document.querySelector("#abs_note").value || "-",
-      evidence_url: evidenceUrls[0] || null,
-      evidence_urls: evidenceUrls,
-      status: "PENDING"
+      user_id: p.id, discord_id: p.discord_id, nama: userDisplayName(p),
+      jabatan: p.jabatan, rank_detail: p.rank_detail, divisi: p.divisi,
+      badge_number: p.badge_number || "", type,
+      location: type === "ABSENSI" ? document.querySelector("#abs_location").value : "",
+      note, evidence_url: evidenceUrls[0] || null, evidence_urls: evidenceUrls,
+      status: "PENDING", ...dutyData, ...leaveData
     };
-
     const { error } = await supabase.from("attendance").insert(item);
     if(error) throw error;
-
-    await audit("CREATE_ATTENDANCE", "attendance", "", item);
+    await audit(`CREATE_${type}`, "attendance", "", item);
     await loadAll();
-
-    toast("Absensi masuk ke log dan menunggu ACC.", "success");
-    go("log");
-    S.tab = "attendance";
-    render();
-  }catch(err){
-    alert(err.message);
-  }
+    toast(`${type} masuk ke log dan menunggu ACC.`, "success");
+    go("log"); S.tab = "attendance"; render();
+  }catch(err){ alert(err.message); }
 }
 
 async function approveAttendance(id){
   if(!canApproveAttendance()) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa ACC absensi.");
   const row = S.attendance.find(x => x.id === id);
+  if(!row) return alert("Data tidak ditemukan.");
   const note = prompt("Keterangan ACC") || "Disetujui";
-
-  const { error } = await supabase
-    .from("attendance")
-    .update({ status:"APPROVED", approved_by:S.profile.display_name, approval_note:note })
-    .eq("id", id);
-
+  const { error } = await supabase.from("attendance").update({ status:"APPROVED", approved_by:S.profile.display_name, approval_note:note }).eq("id", id);
   if(error) return alert(error.message);
+
+  if(String(row.type || "").toUpperCase() === "ABSENSI"){
+    const member = S.members.find(x => x.id === row.user_id);
+    const prof = await supabase.from("profiles").update({
+      duty_minutes: Number(member?.duty_minutes || 0) + Number(row.total_minutes || 0),
+      duty_points: roundPoint(Number(member?.duty_points || 0) + Number(row.total_points || 0)),
+      pending_payroll: Number(member?.pending_payroll || 0) + Number(row.payroll_value || 0)
+    }).eq("id", row.user_id);
+    if(prof.error) return alert(prof.error.message);
+  }
 
   await audit("APPROVE_ATTENDANCE", "attendance", id, { note, row });
   await botEvent("ATTENDANCE_APPROVED", {
-    id,
-    nama: row?.nama,
-    divisi: row?.divisi,
-    badge_number: row?.badge_number,
-    type: row?.type,
-    approved_by: S.profile.display_name,
-    note
+    id, nama: row?.nama, divisi: row?.divisi, badge_number: row?.badge_number,
+    type: row?.type, approved_by: S.profile.display_name, note,
+    total_minutes: row?.total_minutes, total_points: row?.total_points, payroll_value: row?.payroll_value,
+    duty_start_at: row?.duty_start_at, duty_end_at: row?.duty_end_at,
+    leave_start_date: row?.leave_start_date, leave_end_date: row?.leave_end_date
   });
   await loadAll();
+  toast("Pengajuan berhasil di-ACC.", "success");
   render();
 }
 
@@ -1076,68 +1126,63 @@ async function deleteSP(id){
 }
 
 function payrollPage(){
-  return `<main class="app">
-    ${top("FINANCIAL GATEWAY")}
-    <main class="page">
-      <section class="card blue">
-        <span class="badge">PAYROLL SYSTEM</span>
-        <h2 class="big-title">GAJI</h2>
-        <p>${e(userDisplayName(S.profile))} • ${e(S.profile.badge_number || "NO BADGE")}</p>
-      </section>
-
-      <section class="card">
-        <div class="row">
-          <div class="field"><label>Periode</label><input id="pay_period" placeholder="Juni 2026"/></div>
-          <div class="field"><label>Nominal</label><input id="pay_amount" type="number" value="100000"/></div>
-        </div>
-        <div class="field"><label>Keterangan</label><textarea id="pay_note"></textarea></div>
-        <button class="btn green" onclick="submitPayroll()">AJUKAN GAJI</button>
-      </section>
-
-      ${high() ? `<section class="card yellow">
-        <h2>PENDING PAYROLL</h2>
-        ${S.payrolls.filter(x => x.status === "PENDING").map(p => `<div class="list-item">
-          <h3>${e(p.nama)} - $${p.amount}</h3>
-          <div class="mini">${e(p.period)}</div>
-          <div class="split-actions">
-            <button class="btn small green" onclick="approvePayroll(${p.id})">BAYAR</button>
-            <button class="btn small red" onclick="rejectPayroll(${p.id})">TOLAK</button>
-          </div>
-        </div>`).join("") || "<p>Tidak ada pending.</p>"}
-      </section>` : ""}
-    </main>${nav()}
-  </main>`;
+  const p = S.profile;
+  const points = Number(p.duty_points || 0);
+  const minutes = Number(p.duty_minutes || 0);
+  const payroll = Number(p.pending_payroll || 0);
+  const hoursText = `${Math.floor(minutes / 60)}j ${minutes % 60}m`;
+  return `<main class="app">${top("FINANCIAL GATEWAY")}<main class="page">
+    <section class="card blue"><span class="badge">PAYROLL SYSTEM</span><h2 class="big-title">GAJI</h2><p>${e(userDisplayName(p))} • ${e(p.badge_number || "NO BADGE")}</p>
+      <div class="payroll-summary"><div><small>DUTY TIME</small><b>${hoursText}</b></div><div><small>DUTY POINT</small><b>${points}</b></div><div><small>ESTIMASI GAJI</small><b>${money(payroll)}</b></div></div>
+    </section>
+    <section class="card"><h2>AJUKAN PENGAMBILAN GAJI</h2><p class="notice">Point hanya reset setelah payroll di-ACC / dibayar.</p>
+      <div class="row"><div class="field"><label>Periode</label><input id="pay_period" placeholder="Juni 2026" value="${new Date().toLocaleDateString("id-ID", { month:"long", year:"numeric" })}"/></div><div class="field"><label>Nominal Otomatis</label><input id="pay_amount" type="number" value="${payroll}" readonly/></div></div>
+      <div class="row"><div class="field"><label>Point</label><input id="pay_points" type="number" value="${points}" readonly/></div><div class="field"><label>Total Menit</label><input id="pay_minutes" type="number" value="${minutes}" readonly/></div></div>
+      <div class="field"><label>Rekening / E-Wallet / Keterangan</label><textarea id="pay_note"></textarea></div>
+      <button class="btn green" onclick="submitPayroll()">AJUKAN GAJI</button>
+    </section>
+    ${high() ? `<section class="card yellow"><h2>PENDING PAYROLL</h2>${S.payrolls.filter(x => x.status === "PENDING").map(p => `<div class="list-item"><h3>${e(p.nama)} - ${money(p.requested_amount || p.amount || 0)}</h3><div class="mini">${e(p.period || "-")} • ${Number(p.requested_points || 0)} point • ${Number(p.requested_minutes || 0)} menit</div><div class="split-actions"><button class="btn small green" onclick="approvePayroll(${p.id})">BAYAR</button><button class="btn small red" onclick="rejectPayroll(${p.id})">TOLAK</button></div></div>`).join("") || "<p>Tidak ada pending.</p>"}</section>` : ""}
+  </main>${nav()}</main>`;
 }
 
 async function submitPayroll(){
+  const points = Number(S.profile.duty_points || 0);
+  const minutes = Number(S.profile.duty_minutes || 0);
+  const amount = Number(S.profile.pending_payroll || 0);
+  if(points <= 0 || amount <= 0) return alert("Belum ada duty point yang bisa diajukan.");
   const { error } = await supabase.from("payrolls").insert({
-    user_id: S.profile.id,
-    nama: S.profile.display_name,
-    period: document.querySelector("#pay_period").value,
-    amount: Number(document.querySelector("#pay_amount").value || 0),
-    note: document.querySelector("#pay_note").value,
-    status: "PENDING"
+    user_id: S.profile.id, nama: userDisplayName(S.profile), period: document.querySelector("#pay_period").value,
+    amount, requested_points: points, requested_minutes: minutes, requested_amount: amount, approved_amount: 0,
+    note: document.querySelector("#pay_note").value, status: "PENDING"
   });
-
   if(error) return alert(error.message);
-
-  await audit("CREATE_PAYROLL", "payrolls", "", {});
-  await loadAll();
-  render();
+  await audit("CREATE_PAYROLL", "payrolls", "", { points, minutes, amount });
+  await loadAll(); toast("Pengajuan payroll terkirim.", "success"); render();
 }
 
 async function approvePayroll(id){
-  await supabase.from("payrolls").update({ status:"PAID", approved_by:S.profile.display_name }).eq("id", id);
-  await audit("APPROVE_PAYROLL", "payrolls", id, {});
-  await loadAll();
-  render();
+  const row = S.payrolls.find(x => x.id === id);
+  if(!row) return alert("Data payroll tidak ditemukan.");
+  const amount = Number(row.requested_amount || row.amount || 0);
+  const pay = await supabase.from("payrolls").update({ status:"PAID", approved_by:S.profile.display_name, approved_amount: amount }).eq("id", id);
+  if(pay.error) return alert(pay.error.message);
+  const member = S.members.find(x => x.id === row.user_id);
+  const prof = await supabase.from("profiles").update({
+    duty_minutes: 0, duty_points: 0, pending_payroll: 0,
+    total_payroll_received: Number(member?.total_payroll_received || 0) + amount
+  }).eq("id", row.user_id);
+  if(prof.error) return alert(prof.error.message);
+  await audit("APPROVE_PAYROLL", "payrolls", id, { row, amount });
+  await botEvent("PAYROLL_PAID", { id, nama: row.nama, requested_points: row.requested_points, requested_amount: amount, approved_by: S.profile.display_name });
+  await loadAll(); toast("Payroll dibayar dan point duty anggota direset.", "success"); render();
 }
 
 async function rejectPayroll(id){
+  const row = S.payrolls.find(x => x.id === id);
   await supabase.from("payrolls").update({ status:"REJECTED", approved_by:S.profile.display_name }).eq("id", id);
-  await audit("REJECT_PAYROLL", "payrolls", id, {});
-  await loadAll();
-  render();
+  await audit("REJECT_PAYROLL", "payrolls", id, { row });
+  await botEvent("PAYROLL_REJECTED", { id, nama: row?.nama, requested_points: row?.requested_points, requested_amount: row?.requested_amount || row?.amount, rejected_by: S.profile.display_name });
+  await loadAll(); toast("Payroll ditolak. Point duty tidak direset.", "info"); render();
 }
 
 function logPage(){
@@ -1521,6 +1566,8 @@ Object.assign(window, {
   setSearch,
   submitAttendance,
   renderAbsensiTypeHint,
+  updateDutyPreview,
+  refreshAbsensiFormMode,
   approveAttendance,
   rejectAttendance,
   setReportCat,
