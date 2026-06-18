@@ -57,6 +57,8 @@ const fmt = d => d ? new Date(d).toLocaleString("id-ID") : "-";
 const monthKey = () => new Date().toISOString().slice(0,7);
 const onlineLimit = () => Date.now() - 5 * 60 * 1000;
 const isOnline = m => m.last_seen && new Date(m.last_seen).getTime() >= onlineLimit();
+const PERSONNEL_REFRESH_INTERVAL = 10 * 60 * 1000;
+let lastPersonnelRefreshAt = 0;
 const POINTS_PER_HOUR = 10;
 const PAYROLL_PER_POINT = 1000;
 const MIN_DUTY_MINUTES = 30;
@@ -557,8 +559,37 @@ function liveMemberCard(){
 }
 function setupRealtimeWeb(){
   if(S.realtimeReady) return; S.realtimeReady = true;
-  const reloadAndToast = async msg => { await loadAll(); toast(msg, "success"); render(); };
-  supabase.channel("web-profiles-live").on("postgres_changes", { event:"*", schema:"public", table:"profiles" }, () => reloadAndToast("Data personel diperbarui")).subscribe();
+
+  const reloadAndToast = async msg => {
+    await loadAll();
+    toast(msg, "success");
+    render();
+  };
+
+  const reloadPersonnelSlow = async () => {
+    const now = Date.now();
+
+    // profiles sering berubah karena last_seen / online_status.
+    // Supaya halaman Personel tidak ganggu, data personel maksimal reload 1x per 10 menit.
+    if(now - lastPersonnelRefreshAt < PERSONNEL_REFRESH_INTERVAL) return;
+
+    lastPersonnelRefreshAt = now;
+    await loadAll();
+
+    // Toast hanya muncul kalau user sedang di halaman personel/admin/dashboard,
+    // biar tidak spam saat update last_seen.
+    if(["members","admin","dashboard"].includes(S.page)){
+      toast("Data personel diperbarui. Refresh berikutnya maksimal 10 menit sekali.", "info");
+    }
+
+    render();
+  };
+
+  supabase
+    .channel("web-profiles-live")
+    .on("postgres_changes", { event:"*", schema:"public", table:"profiles" }, reloadPersonnelSlow)
+    .subscribe();
+
   supabase.channel("web-attendance-live").on("postgres_changes", { event:"*", schema:"public", table:"attendance" }, () => reloadAndToast("Data absensi diperbarui")).subscribe();
   supabase.channel("web-reports-live").on("postgres_changes", { event:"*", schema:"public", table:"reports" }, () => reloadAndToast("Laporan baru masuk")).subscribe();
   supabase.channel("web-propam-live").on("postgres_changes", { event:"*", schema:"public", table:"disciplinary_records" }, () => reloadAndToast("Data Propam diperbarui")).subscribe();
@@ -944,6 +975,15 @@ function exportReportPDF(id){
   w.document.close();
 }
 
+async function forceRefreshPersonnel(){
+  lastPersonnelRefreshAt = Date.now();
+  await withLoading("Refresh data personel...", async () => {
+    await loadAll();
+    toast("Data personel diperbarui manual.", "success");
+  });
+  render();
+}
+
 function membersPage(){
   const rows = filteredMembers();
 
@@ -951,7 +991,7 @@ function membersPage(){
     ${top("DATA PERSONEL")}
     <main class="page">
       <section class="card">
-        <h2>SEARCH ANGGOTA REALTIME</h2>
+        <div class="section-head"><div><h2>SEARCH ANGGOTA</h2><p class="mini">Auto update personel maksimal 10 menit sekali.</p></div><button class="btn small" onclick="forceRefreshPersonnel()">REFRESH</button></div>
         <input value="${e(S.search)}" oninput="setSearch(this.value)" placeholder="Cari nama / badge / divisi / jabatan..." />
       </section>
 
