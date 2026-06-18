@@ -58,6 +58,30 @@ const monthKey = () => new Date().toISOString().slice(0,7);
 const onlineLimit = () => Date.now() - 5 * 60 * 1000;
 const isOnline = m => m.last_seen && new Date(m.last_seen).getTime() >= onlineLimit();
 
+const STATUS_LABEL = {
+  PENDING: "MENUNGGU VERIFIKASI",
+  ACTIVE: "TERVERIFIKASI",
+  SUSPENDED: "DIBEKUKAN",
+  PTDH: "PTDH",
+  REJECTED: "DITOLAK",
+  DELETED: "DIHAPUS"
+};
+
+function statusLabel(status){
+  return STATUS_LABEL[status] || status || "-";
+}
+
+function statusOptions(current){
+  return ["PENDING","ACTIVE","SUSPENDED","PTDH","REJECTED"].map(x =>
+    `<option value="${x}" ${current === x ? "selected" : ""}>${STATUS_LABEL[x]}</option>`
+  ).join("");
+}
+
+function canDeleteMember(){
+  return can(["PATI","SUPER ADMIN"]);
+}
+
+
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function pageTitle(page = S.page){
@@ -350,7 +374,7 @@ function pending(){
     ${top("ACCOUNT VERIFICATION")}
     <main class="page">
       <section class="card yellow">
-        <h2>AKUN ${e(p.status)}</h2>
+        <h2>AKUN ${e(statusLabel(p.status))}</h2>
         <p>Menunggu ACC PATI / SUPER ADMIN.</p>
         <button class="btn red" onclick="logout()">LOGOUT</button>
       </section>
@@ -360,7 +384,7 @@ function pending(){
           <img src="${e(p.avatar_url || "/logo.png")}"/>
           <div>
             <h2>${e(userDisplayName(p))}</h2>
-            <span class="status ${e(p.status)}">${e(p.status)}</span>
+            <span class="status ${e(statusLabel(p.status))}">${e(statusLabel(p.status))}</span>
           </div>
         </div>
 
@@ -468,7 +492,7 @@ function commandStatsCard(){
   for(const m of S.members){ const key = m.divisi || "LAINNYA"; divMap[key] = (divMap[key] || 0) + 1; }
   const max = Math.max(1, ...Object.values(divMap));
   const rows = Object.entries(divMap).sort((a,b)=>b[1]-a[1]);
-  return `<section class="card command-panel"><div class="section-head"><div><h2>DASHBOARD PETINGGI</h2><p class="mini">Statistik anggota, divisi, absensi, laporan, dan pelanggaran.</p></div><button class="btn small" onclick="syncDiscord()">SYNC DISCORD</button></div><div class="stats-grid"><div><small>TOTAL ANGGOTA</small><b>${S.members.length}</b></div><div><small>AKTIF</small><b>${S.members.filter(x=>x.status==="ACTIVE").length}</b></div><div><small>LAPORAN</small><b>${S.reports.length}</b></div><div><small>PAYROLL</small><b>${S.payrolls.filter(x=>x.status==="PENDING").length}</b></div></div><h3>STATISTIK DIVISI</h3><div class="chart-list">${rows.map(([name,total])=>`<div class="chart-row"><span>${e(name)}</span><div class="chart-track"><i style="width:${Math.max(8, Math.round((total/max)*100))}%"></i></div><b>${total}</b></div>`).join("") || `<div class="empty">Belum ada data divisi.</div>`}</div></section>`;
+  return `<section class="card command-panel"><div class="section-head"><div><h2>DASHBOARD PETINGGI</h2><p class="mini">Statistik anggota, divisi, absensi, laporan, dan pelanggaran.</p></div><button class="btn small" onclick="syncDiscord()">SYNC DISCORD</button></div><div class="stats-grid"><div><small>TOTAL ANGGOTA</small><b>${S.members.length}</b></div><div><small>TERVERIFIKASI</small><b>${S.members.filter(x=>x.status==="ACTIVE").length}</b></div><div><small>LAPORAN</small><b>${S.reports.length}</b></div><div><small>PAYROLL</small><b>${S.payrolls.filter(x=>x.status==="PENDING").length}</b></div></div><h3>STATISTIK DIVISI</h3><div class="chart-list">${rows.map(([name,total])=>`<div class="chart-row"><span>${e(name)}</span><div class="chart-track"><i style="width:${Math.max(8, Math.round((total/max)*100))}%"></i></div><b>${total}</b></div>`).join("") || `<div class="empty">Belum ada data divisi.</div>`}</div></section>`;
 }
 function liveMemberCard(){
   const online = S.members.filter(isOnline).slice(0,12);
@@ -577,7 +601,7 @@ function attendanceAdminPanel(){
             <span class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.divisi || "-")}</span>
           </td>
           <td>
-            <span class="status ${e(r.status)}">${e(r.status)}</span><br>
+            <span class="status ${e(statusLabel(r.status))}">${e(statusLabel(r.status))}</span><br>
             <span class="mini">${e(r.type)}</span>
           </td>
           <td>${fmt(r.created_at)}</td>
@@ -726,7 +750,7 @@ function reportsPage(){
         <h2>RIWAYAT LAPORAN</h2>
         ${S.reports.slice(0,30).map(r=>`<div class="list-item">
           <h3>${e(r.type)} - ${e(r.nama)}</h3>
-          <div class="mini">${fmt(r.created_at)} • ${e(r.status)}</div>
+          <div class="mini">${fmt(r.created_at)} • ${e(statusLabel(r.status))}</div>
           <p>${e(r.payload?.report || "-")}</p>
           <button class="btn small" onclick="exportReportPDF(${r.id})">EXPORT PDF</button>
         </div>`).join("") || `<div class="empty">Belum ada laporan.</div>`}
@@ -803,7 +827,7 @@ function exportReportPDF(id){
     <tr><th>Nama</th><td>${e(r.nama)}</td></tr>
     <tr><th>Badge</th><td>${e(r.badge_number || "NO BADGE")}</td></tr>
     <tr><th>Divisi</th><td>${e(r.divisi)}</td></tr>
-    <tr><th>Status</th><td>${e(r.status)}</td></tr>
+    <tr><th>Status</th><td>${e(statusLabel(r.status))}</td></tr>
     <tr><th>Lokasi</th><td>${e(r.payload?.location || "-")}</td></tr>
     <tr><th>Shift</th><td>${e(r.payload?.shift || "-")}</td></tr>
     <tr><th>Kronologi</th><td>${e(r.payload?.report || "-")}</td></tr>
@@ -852,7 +876,7 @@ function memberMini(m, showActions=false){
     <h3>
       <span class="online-dot ${isOnline(m) ? "on" : "off"}"></span>
       ${e(m.display_name)}
-      <span class="status ${e(m.status)}">${e(m.status)}</span>
+      <span class="status ${e(statusLabel(m.status))}">${e(statusLabel(m.status))}</span>
     </h3>
     <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan || "-")} • ${e(m.divisi || "-")}</div>
     <div class="mini">Last login: ${fmt(m.last_login)} • Last seen: ${fmt(m.last_seen)}</div>
@@ -895,7 +919,7 @@ function openMemberDetail(id){
     ${sps.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${x.sp_level==99?"PTDH":"SP"+x.sp_level} - ${e(x.reason)} oleh ${e(x.issued_by)}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
 
     <h3>Absensi Terakhir</h3>
-    ${abs.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.type)} / ${e(x.status)} - ${e(x.note || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+    ${abs.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.type)} / ${e(statusLabel(x.status))} - ${e(x.note || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
 
     <button class="btn red" onclick="closeModal()">TUTUP</button>
   </section>`;
@@ -1111,7 +1135,7 @@ function logTable(title, rows, type){
             ${e(r.nama || r.target_name || r.type)}<br>
             <span class="mini">${e(r.divisi || r.badge_number || "")}</span>
           </td>
-          <td><span class="status ${e(r.status)}">${e(r.status)}</span></td>
+          <td><span class="status ${e(statusLabel(r.status))}">${e(statusLabel(r.status))}</span></td>
           <td>
             ${e(r.note || r.reason || r.payload?.report || "-")}<br>
             <span class="mini">${e(r.location || r.payload?.location || "")}</span>
@@ -1203,10 +1227,11 @@ function adminMembers(){
     <h2>KELOLA ANGGOTA</h2>
     <input value="${e(S.search)}" oninput="setSearch(this.value)" placeholder="Cari anggota..."/>
     ${rows.map(m => `<div class="list-item">
-      <h3><span class="online-dot ${isOnline(m) ? "on" : "off"}"></span>${e(m.display_name)} <span class="status ${e(m.status)}">${e(m.status)}</span></h3>
+      <h3><span class="online-dot ${isOnline(m) ? "on" : "off"}"></span>${e(m.display_name)} <span class="status ${e(statusLabel(m.status))}">${e(statusLabel(m.status))}</span></h3>
       <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan)} • ${e(m.divisi)}</div>
       <button class="btn small" onclick="openMemberDetail(${m.id})">DETAIL</button>
       <button class="btn small yellow" onclick="openMemberEditor(${m.id})">EDIT</button>
+      ${canDeleteMember() ? `<button class="btn small red" onclick="deleteMember(${m.id})">HAPUS</button>` : ""}
     </div>`).join("") || `<div class="empty">Tidak ditemukan.</div>`}
   </section>`;
 }
@@ -1285,9 +1310,10 @@ function openMemberEditor(id){
     <div class="field"><label>Jabatan</label><select id="edit_jabatan">${JAB.map(x => `<option ${m.jabatan===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Rank Detail</label><select id="edit_rank">${RANK.map(x => `<option ${m.rank_detail===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Divisi</label><select id="edit_divisi">${DIV.map(x => `<option ${m.divisi===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
-    <div class="field"><label>Status</label><select id="edit_status">${["PENDING","ACTIVE","SUSPENDED","PTDH","REJECTED"].map(x => `<option ${m.status===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Status</label><select id="edit_status">${statusOptions(m.status)}</select></div>
     <button class="btn green" onclick="saveMember(${m.id})">SIMPAN</button>
-    <button class="btn red" onclick="closeModal()">BATAL</button>
+    ${canDeleteMember() ? `<button class="btn red danger-delete" onclick="deleteMember(${m.id})">HAPUS ANGGOTA</button>` : ""}
+    <button class="btn" onclick="closeModal()">BATAL</button>
   </section>`;
 
   document.body.appendChild(modal);
@@ -1367,6 +1393,55 @@ async function rejectUser(id){
   render();
 }
 
+
+async function deleteMember(id){
+  if(!canDeleteMember()) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa menghapus anggota.");
+
+  const target = S.members.find(x => x.id === id);
+  if(!target) return alert("Anggota tidak ditemukan.");
+
+  if(target.id === S.profile.id) return alert("Tidak bisa menghapus akun sendiri.");
+
+  if(target.jabatan === "SUPER ADMIN" && S.profile.jabatan !== "SUPER ADMIN"){
+    return alert("Hanya SUPER ADMIN yang bisa menghapus SUPER ADMIN.");
+  }
+
+  const reason = prompt(`Alasan menghapus anggota ${target.display_name}?`);
+  if(!reason || !reason.trim()) return alert("Alasan penghapusan wajib diisi.");
+
+  if(!confirm(`Yakin hapus anggota ${target.display_name}? Tindakan ini akan masuk audit log.`)) return;
+
+  try{
+    await audit("DELETE_MEMBER", "profiles", id, {
+      target,
+      deleted_by: S.profile.display_name,
+      reason
+    });
+
+    await botEvent("MEMBER_DELETED", {
+      id,
+      nama: target.display_name,
+      badge_number: target.badge_number || "NO BADGE",
+      divisi: target.divisi || "-",
+      jabatan: target.jabatan || "-",
+      rank_detail: target.rank_detail || "-",
+      deleted_by: S.profile.display_name,
+      reason
+    });
+
+    const { error } = await supabase.from("profiles").delete().eq("id", id);
+    if(error) throw error;
+
+    closeModal();
+    await loadAll();
+    toast("Anggota berhasil dihapus.", "success");
+    render();
+  }catch(err){
+    alert("Gagal hapus anggota: " + err.message);
+  }
+}
+
+
 function blocked(msg){
   return `<main class="app">
     ${top("ACCESS DENIED")}
@@ -1412,6 +1487,7 @@ Object.assign(window, {
   saveMember,
   approveUser,
   rejectUser,
+  deleteMember,
   generateBadgeForSelected,
   generateBadgeForAll,
   toggleTheme,
