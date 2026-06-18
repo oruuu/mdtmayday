@@ -16,6 +16,7 @@ const S = {
   audit: [],
   roleHistory: [],
   divisionHistory: [],
+  promotionRequests: [],
   currentReport: "PATROLI",
   loading: false,
   loadingText: "Memuat data MDT...",
@@ -44,28 +45,65 @@ const REPORT_TYPES = [
 ];
 
 const ACTIVITY_CAP_BY_RANK = {
-  "CASIS": 5,
-  "Bharada": 8,
-  "Bharatu": 10,
-  "Bharaka": 12,
-  "Bripda": 14,
-  "Briptu": 16,
-  "Brigpol": 18,
-  "Bripka": 20,
-  "Aipda": 22,
-  "Aiptu": 24,
-  "Ipda": 28,
-  "Iptu": 32,
-  "AKP": 36,
-  "Kompol": 40,
-  "AKBP": 45,
-  "Kombes": 50,
-  "Brigjen": 60,
-  "Irjen": 70,
-  "Komjen": 80,
-  "Jenderal Polisi": 100,
-  "Super Admin": 999
+  "CASIS": 20,
+  "Bharada": 30,
+  "Bharatu": 50,
+  "Bharaka": 65,
+  "Bripda": 75,
+  "Briptu": 85,
+  "Brigpol": 95,
+  "Bripka": 110,
+  "Aipda": 130,
+  "Aiptu": 150,
+  "Ipda": 180,
+  "Iptu": 220,
+  "AKP": 260,
+  "Kompol": 300,
+  "AKBP": 350,
+  "Kombes": 400,
+  "Brigjen": 999999,
+  "Irjen": 999999,
+  "Komjen": 999999,
+  "Jenderal Polisi": 999999,
+  "PATI": 999999,
+  "Super Admin": 999999
 };
+
+const REPORT_ACTIVITY_POINTS = {
+  "PATROLI": 2,
+  "PENYITAAN_KENDARAAN": 2,
+  "KRIMINAL": 3
+};
+
+function reportPointValue(type){
+  return REPORT_ACTIVITY_POINTS[type] || 1;
+}
+
+function rankIndex(rank){
+  return RANK.findIndex(x => String(x).toLowerCase() === String(rank || "").toLowerCase());
+}
+
+function nextRank(rank){
+  const idx = rankIndex(rank);
+  if(idx < 0 || idx >= RANK.length - 1) return "";
+  const next = RANK[idx + 1];
+  return next === "Super Admin" ? "" : next;
+}
+
+function isUnlimitedRank(rank){
+  return ["PATI","SUPER ADMIN","Brigjen","Irjen","Komjen","Jenderal Polisi","Super Admin"].includes(rank);
+}
+
+function rankProgress(member = S.profile){
+  const rank = member?.rank_detail || member?.jabatan || "CASIS";
+  const point = Number(member?.activity_points_month || 0);
+  const cap = activityCapFor(member);
+  const unlimited = isUnlimitedRank(rank) || cap >= 999999;
+  const pct = unlimited ? 100 : Math.min(100, Math.round((point / Math.max(1, cap)) * 100));
+  const target = nextRank(rank);
+  const eligible = !unlimited && point >= cap && !!target;
+  return { rank, point, cap, unlimited, pct, target, eligible };
+}
 
 function reportTypeLabel(type){
   return REPORT_TYPES.find(x => x.id === type)?.label || type || "LAPORAN";
@@ -100,7 +138,7 @@ function canDeleteReport(r){
   return canManageReports();
 }
 
-async function addActivityPoint(userId, reason = "REPORT_APPROVED"){
+async function addActivityPoint(userId, reason = "REPORT_APPROVED", amount = 1){
   const member = S.members.find(x => x.id === userId);
   if(!member) return;
 
@@ -108,8 +146,11 @@ async function addActivityPoint(userId, reason = "REPORT_APPROVED"){
   const currentPeriod = member.activity_points_period || period;
   const current = currentPeriod === period ? Number(member.activity_points_month || 0) : 0;
   const cap = activityCapFor(member);
-  const next = Math.min(cap, current + 1);
-  const total = Number(member.activity_points_total || 0) + (next > current ? 1 : 0);
+  const unlimited = isUnlimitedRank(member.rank_detail || member.jabatan) || cap >= 999999;
+  const add = Number(amount || 1);
+  const next = unlimited ? current + add : Math.min(cap, current + add);
+  const gained = Math.max(0, next - current);
+  const total = Number(member.activity_points_total || 0) + gained;
 
   await supabase.from("profiles").update({
     activity_points_period: period,
@@ -117,14 +158,22 @@ async function addActivityPoint(userId, reason = "REPORT_APPROVED"){
     activity_points_total: total
   }).eq("id", userId);
 
-  await audit("ADD_ACTIVITY_POINT", "profiles", userId, { reason, before: current, after: next, cap });
+  const local = S.members.find(x => x.id === userId);
+  if(local){
+    local.activity_points_period = period;
+    local.activity_points_month = next;
+    local.activity_points_total = total;
+  }
+
+  await audit("ADD_ACTIVITY_POINT", "profiles", userId, { reason, before: current, after: next, cap, amount:add, gained });
 }
 
 async function grantReportActivityPoints(report){
   const payload = report.payload || {};
+  const amount = reportPointValue(report.type);
   const ids = new Set([report.user_id, ...(payload.colleagues || []).map(Number)].filter(Boolean));
   for(const id of ids){
-    await addActivityPoint(id, `REPORT_${report.id}_APPROVED`);
+    await addActivityPoint(id, `REPORT_${report.id}_${report.type}_APPROVED`, amount);
   }
 }
 
@@ -145,7 +194,17 @@ const high = () => can(HIGH);
 const admin = () => can(MAN);
 const canApproveAttendance = () => can(ATTENDANCE_APPROVER);
 const propam = () => S.profile?.divisi === "BIDPROPAM" || can(["PATI","SUPER ADMIN"]);
-const fmt = d => d ? new Date(d).toLocaleString("id-ID") : "-";
+function fmt(d){
+  if(!d) return "-";
+  return new Date(d).toLocaleString("id-ID", {
+    day:"2-digit",
+    month:"2-digit",
+    year:"numeric",
+    hour:"2-digit",
+    minute:"2-digit",
+    hour12:false
+  }).replace(".", ":");
+}
 const monthKey = () => new Date().toISOString().slice(0,7);
 const onlineLimit = () => Date.now() - 5 * 60 * 1000;
 const isOnline = m => m.last_seen && new Date(m.last_seen).getTime() >= onlineLimit();
@@ -270,7 +329,8 @@ function loadingOverlay(){
   return S.loading ? `<div class="loading-screen"><div class="loading-card"><img src="/logo.png"/><h2>MAYDAY MDT</h2><p>${e(S.loadingText || "Loading...")}</p><div class="loader-line"><span></span></div></div></div>` : "";
 }
 function skeletonPage(title = "MEMUAT"){
-  return `<main class="app">${top(title)}<main class="page"><section class="card skeleton-card"><div class="skeleton sk-title"></div><div class="skeleton sk-line"></div><div class="skeleton sk-line short"></div></section><section class="grid">${Array.from({length:6}).map(()=>`<div class="tile skeleton-tile"><div class="skeleton sk-icon"></div><div class="skeleton sk-line"></div></div>`).join("")}</section></main></main>`;
+  return `<main class="app">${top(title)}<main class="page">
+      ${promotionAdminPanel()}<section class="card skeleton-card"><div class="skeleton sk-title"></div><div class="skeleton sk-line"></div><div class="skeleton sk-line short"></div></section><section class="grid">${Array.from({length:6}).map(()=>`<div class="tile skeleton-tile"><div class="skeleton sk-icon"></div><div class="skeleton sk-line"></div></div>`).join("")}</section></main></main>`;
 }
 async function withLoading(text, fn){
   try{ S.loading = true; S.loadingText = text || "Memproses..."; render(); await sleep(140); return await fn(); }
@@ -374,7 +434,7 @@ async function markOnline(updateProfileState=false, offline=false){
 }
 
 async function loadAll(){
-  const [m,a,r,p,pay,au,rh,dh] = await Promise.all([
+  const [m,a,r,p,pay,au,rh,dh,pr] = await Promise.all([
     supabase.from("profiles").select("*").order("created_at", { ascending:false }),
     supabase.from("attendance").select("*").order("created_at", { ascending:false }).limit(400),
     supabase.from("reports").select("*").order("created_at", { ascending:false }).limit(300),
@@ -382,7 +442,8 @@ async function loadAll(){
     supabase.from("payrolls").select("*").order("created_at", { ascending:false }).limit(300),
     supabase.from("audit_logs").select("*").order("created_at", { ascending:false }).limit(250),
     supabase.from("role_history").select("*").order("created_at", { ascending:false }).limit(300),
-    supabase.from("division_history").select("*").order("created_at", { ascending:false }).limit(300)
+    supabase.from("division_history").select("*").order("created_at", { ascending:false }).limit(300),
+    supabase.from("promotion_requests").select("*").order("created_at", { ascending:false }).limit(300)
   ]);
 
   S.members = m.data || [];
@@ -394,6 +455,7 @@ async function loadAll(){
   S.audit = au.data || [];
   S.roleHistory = rh.data || [];
   S.divisionHistory = dh.data || [];
+  S.promotionRequests = pr.data || [];
 }
 
 async function audit(action, target_type, target_id, metadata = {}){
@@ -622,12 +684,39 @@ function dashboard(){
         ${high() ? `<button class="tile" onclick="go('admin')"><div class="icon">⚙</div>ADMIN<small>Panel petinggi</small></button>` : ""}
       </section>
 
+      ${activityProgressCard()}
       ${commandStatsCard()}
       ${leaderboardCard()}
       ${liveMemberCard()}
       ${!p.badge_number ? `<section class="card red"><h2>BADGE BELUM DISET</h2><p>Badge bisa diedit oleh perwira/admin.</p></section>` : ""}
     </main>${nav()}
   </main>`;
+}
+
+function activityProgressCard(){
+  const p = S.profile;
+  const pr = rankProgress(p);
+  const pending = S.promotionRequests?.find(x => x.user_id === p.id && x.status === "PENDING");
+
+  return `<section class="card activity-card">
+    <div class="section-head">
+      <div>
+        <h2>ACTIVITY POINT</h2>
+        <p class="mini">Syarat administrasi kenaikan pangkat.</p>
+      </div>
+      <span class="status ${pr.eligible ? "APPROVED" : "PENDING"}">${pr.unlimited ? "UNLIMITED" : `${pr.point}/${pr.cap}`}</span>
+    </div>
+
+    <div class="activity-rank-row">
+      <div><small>RANK SAAT INI</small><b>${e(pr.rank)}</b></div>
+      <div><small>RANK TUJUAN</small><b>${e(pr.target || "MAX RANK")}</b></div>
+      <div><small>PROGRESS</small><b>${pr.unlimited ? "∞" : `${pr.pct}%`}</b></div>
+    </div>
+
+    <div class="activity-progress"><span style="width:${pr.pct}%"></span></div>
+
+    ${pending ? `<div class="warning-soft-mini">Pengajuan kenaikan pangkat sedang menunggu ACC.</div>` : pr.eligible ? `<button class="btn green" onclick="submitPromotionRequest()">AJUKAN KENAIKAN PANGKAT</button>` : `<p class="notice">Belum memenuhi syarat. Butuh ${pr.unlimited ? "0" : Math.max(0, pr.cap - pr.point)} point lagi.</p>`}
+  </section>`;
 }
 
 function leaderboardCard(){
@@ -686,6 +775,7 @@ function setupRealtimeWeb(){
   supabase.channel("web-reports-live").on("postgres_changes", { event:"*", schema:"public", table:"reports" }, () => reloadAndToast("Laporan baru masuk")).subscribe();
   supabase.channel("web-propam-live").on("postgres_changes", { event:"*", schema:"public", table:"disciplinary_records" }, () => reloadAndToast("Data Propam diperbarui")).subscribe();
   supabase.channel("web-payroll-live").on("postgres_changes", { event:"*", schema:"public", table:"payrolls" }, () => reloadAndToast("Payroll diperbarui")).subscribe();
+  supabase.channel("web-promotion-live").on("postgres_changes", { event:"*", schema:"public", table:"promotion_requests" }, () => reloadAndToast("Pengajuan kenaikan pangkat diperbarui")).subscribe();
 }
 async function syncDiscord(){
   if(!S.profile?.discord_id) return toast("Discord ID belum tersedia.", "error");
@@ -807,7 +897,8 @@ function attendanceTableBlock(title, cls, rows, desc){
           <td><span class="type-pill ${e(String(r.type || "").toLowerCase())}">${e(r.type || "-")}</span></td>
           <td><span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span></td>
           <td><span class="mini">${detail}</span></td>
-          <td>${e(r.note || "-")}<br>${r.location ? `<span class="mini">${e(r.location)}</span>` : ""}${r.approval_note ? `<br><span class="mini">ACC: ${e(r.approval_note)}</span>` : ""}${r.reject_reason ? `<br><span class="mini">Alasan Tolak: ${e(r.reject_reason)}</span>` : ""}${renderEvidenceLinks(r)}</td>
+          <td>${e(r.note || "-")}<br>${r.location ? `<span class="mini">${e(r.location)}</span>` : ""}${r.approval_note ? `<br><span class="mini">ACC: ${e(r.approval_note)}</span>` : ""}${r.reject_reason ? `<br><span class="mini">Alasan Tolak: ${e(r.reject_reason)}</span>` : ""}<p><b>Activity Point:</b> ${reportPointValue(r.type)} point</p>
+    ${renderEvidenceLinks(r)}</td>
           ${canApproveAttendance() ? `<td>${r.status === "PENDING" ? `<button class="btn small green" onclick="approveAttendance(${r.id})">ACC</button><button class="btn small red" onclick="rejectAttendance(${r.id})">TOLAK</button>` : `<span class="mini">oleh ${e(r.approved_by || "-")}</span>`}</td>` : ""}
         </tr>`;
       }).join("")}</tbody></table>` : `<div class="empty">Tidak ada data ${title.toLowerCase()}.</div>`}
@@ -1718,12 +1809,122 @@ function auditLog(){
   </section>`;
 }
 
+
+async function submitPromotionRequest(){
+  const p = S.profile;
+  const pr = rankProgress(p);
+  if(!pr.eligible) return alert("Activity point belum memenuhi syarat kenaikan pangkat.");
+  const pending = S.promotionRequests?.find(x => x.user_id === p.id && x.status === "PENDING");
+  if(pending) return alert("Kamu masih punya pengajuan kenaikan pangkat yang pending.");
+
+  const note = prompt("Catatan pengajuan kenaikan pangkat") || "Mengajukan kenaikan pangkat berdasarkan activity point.";
+  const item = {
+    user_id: p.id,
+    nama: userDisplayName(p),
+    badge_number: p.badge_number || "",
+    divisi: p.divisi || "",
+    current_rank: pr.rank,
+    target_rank: pr.target,
+    activity_points: pr.point,
+    required_points: pr.cap,
+    note,
+    status: "PENDING"
+  };
+
+  const { error } = await supabase.from("promotion_requests").insert(item);
+  if(error) return alert(error.message);
+
+  await audit("CREATE_PROMOTION_REQUEST", "promotion_requests", "", item);
+  await botEvent("PROMOTION_REQUESTED", item);
+  await loadAll();
+  toast("Pengajuan kenaikan pangkat dikirim.", "success");
+  render();
+}
+
+async function approvePromotionRequest(id){
+  if(!can(["PATI","SUPER ADMIN"])) return alert("Hanya PATI / SUPER ADMIN yang bisa ACC kenaikan pangkat.");
+  const req = S.promotionRequests.find(x => x.id === id);
+  if(!req) return alert("Pengajuan tidak ditemukan.");
+
+  const note = prompt("Catatan ACC kenaikan pangkat") || "Disetujui";
+  const member = S.members.find(x => x.id === req.user_id);
+  const oldRank = member?.rank_detail || req.current_rank;
+  const newRank = req.target_rank;
+
+  const upProfile = await supabase.from("profiles").update({
+    rank_detail: newRank,
+    activity_points_month: 0,
+    activity_points_period: monthKey()
+  }).eq("id", req.user_id);
+  if(upProfile.error) return alert(upProfile.error.message);
+
+  await supabase.from("promotion_requests").update({
+    status:"APPROVED",
+    approved_by:S.profile.display_name,
+    approval_note:note
+  }).eq("id", id);
+
+  await supabase.from("role_history").insert({
+    user_id: req.user_id,
+    nama: req.nama,
+    old_role: oldRank,
+    new_role: newRank,
+    changed_by: S.profile.display_name,
+    note: `Kenaikan pangkat via activity point. ${note}`
+  });
+
+  await audit("APPROVE_PROMOTION_REQUEST", "promotion_requests", id, { req, oldRank, newRank, note });
+  await botEvent("PROMOTION_APPROVED", { id, nama:req.nama, old_rank:oldRank, new_rank:newRank, approved_by:S.profile.display_name, note });
+  await loadAll();
+  toast("Kenaikan pangkat di-ACC. Activity point direset ke 0.", "success");
+  render();
+}
+
+async function rejectPromotionRequest(id){
+  if(!can(["PATI","SUPER ADMIN"])) return alert("Hanya PATI / SUPER ADMIN yang bisa reject kenaikan pangkat.");
+  const req = S.promotionRequests.find(x => x.id === id);
+  const reason = prompt("Alasan reject kenaikan pangkat") || "Ditolak";
+  const { error } = await supabase.from("promotion_requests").update({
+    status:"REJECTED",
+    approved_by:S.profile.display_name,
+    reject_reason:reason
+  }).eq("id", id);
+  if(error) return alert(error.message);
+
+  await audit("REJECT_PROMOTION_REQUEST", "promotion_requests", id, { req, reason });
+  await botEvent("PROMOTION_REJECTED", { id, nama:req?.nama, rejected_by:S.profile.display_name, reason });
+  await loadAll();
+  toast("Pengajuan kenaikan pangkat ditolak. Activity point tetap tersimpan.", "info");
+  render();
+}
+
+function promotionAdminPanel(){
+  if(!can(["PATI","SUPER ADMIN"])) return "";
+  const rows = S.promotionRequests.filter(x => x.status === "PENDING");
+  return `<section class="card">
+    <div class="section-head">
+      <div><h2>PENGAJUAN KENAIKAN PANGKAT</h2><p class="mini">ACC akan menaikkan rank dan reset activity point bulanan ke 0.</p></div>
+      <span class="status PENDING">${rows.length} PENDING</span>
+    </div>
+    ${rows.map(r => `<div class="list-item">
+      <h3>${e(r.nama)} - ${e(r.current_rank)} → ${e(r.target_rank)}</h3>
+      <div class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.divisi || "-")} • ${Number(r.activity_points || 0)}/${Number(r.required_points || 0)} point</div>
+      <p>${e(r.note || "-")}</p>
+      <div class="split-actions">
+        <button class="btn small green" onclick="approvePromotionRequest(${r.id})">ACC</button>
+        <button class="btn small red" onclick="rejectPromotionRequest(${r.id})">REJECT</button>
+      </div>
+    </div>`).join("") || `<div class="empty">Tidak ada pengajuan pending.</div>`}
+  </section>`;
+}
+
 function adminPage(){
   if(!high()) return blocked("PANEL PETINGGI ONLY");
 
   return `<main class="app">
     ${top("ADMIN PANEL")}
     <main class="page">
+      ${promotionAdminPanel()}
       <section class="tabs">
         ${[
           ["today","MENU"],
@@ -2030,6 +2231,9 @@ Object.assign(window, {
   submitReport,
   exportReportPDF,
   deleteReport,
+  rejectPromotionRequest,
+  approvePromotionRequest,
+  submitPromotionRequest,
   rejectReport,
   approveReport,
   saveReport,
