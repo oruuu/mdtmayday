@@ -902,3 +902,51 @@ html[data-theme="dark"] .cuti-window{background:#052514!important}
 .payroll-preview b,.payroll-summary b,.payroll-mini b{display:block;color:#020617;font-size:14px;font-weight:1000}
 .payroll-preview p{grid-column:1/-1;margin:6px 0 0;font-weight:1000}.payroll-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.payroll-mini{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:680px){.payroll-preview,.payroll-summary,.payroll-mini{grid-template-columns:1fr 1fr}}
+
+
+/* ===============================
+   REPORT V4 - PATROLI + WAJIB FOTO
+================================== */
+.report-form-card select[multiple]{
+  min-height:170px;
+  background:#fff;
+  color:#020617;
+}
+
+.report-form-card .kv{
+  margin-bottom:18px!important;
+}
+
+html[data-theme="dark"] .report-form-card select[multiple]{
+  background:#0f172a!important;
+  color:#e5edff!important;
+}
+
+
+/* MAYDAY MDT V2.2 PATCH */
+.top-actions{display:flex;align-items:center;gap:10px}
+.exit-btn{background:#050817;color:#fff;border:4px solid #000;border-radius:16px;padding:10px 13px;font-weight:1000;box-shadow:4px 4px 0 #000}
+.nav-seven{grid-template-columns:repeat(7,1fr)}
+.nav-seven button{font-size:10px}
+.nav-seven span{font-size:18px}
+.table a{color:#2563eb;font-weight:1000;text-decoration:underline}
+.kv strong{display:block;color:#000!important;font-size:14px!important;font-weight:1000!important;margin-top:6px;min-height:18px}
+.kv small{color:#475569!important}
+.card.blue .kv strong{color:#000!important}
+.white-mini{color:#e5edff!important}
+.online-dot{display:inline-block;width:11px;height:11px;border-radius:999px;border:2px solid #000;margin-right:7px;vertical-align:middle}
+.online-dot.on{background:#22c55e}
+.online-dot.off{background:#94a3b8}
+.evidence-links{margin-top:6px;display:flex;gap:7px;flex-wrap:wrap}
+.evidence-links a{background:#e0f2fe;border:2px solid #000;border-radius:999px;padding:3px 7px;color:#075985!important;font-size:11px}
+.leader-row{display:flex;justify-content:space-between;gap:10px;border-bottom:2px solid #e5e7eb;padding:10px 0}
+.leader-row span{color:#64748b;font-size:12px;font-weight:900}
+.audit-pre{white-space:pre-wrap;background:#f8fafc;border:3px solid #000;border-radius:12px;padding:10px;font-size:11px;max-height:180px;overflow:auto}
+@media(max-width:560px){
+  .topbar{padding:13px}
+  .topbar h1{font-size:14px}
+  .exit-btn{font-size:10px;padding:8px}
+  .avatar{width:46px;height:46px}
+  .top-title img{width:42px;height:42px}
+  .table th,.table td{padding:7px;font-size:10px}
+}

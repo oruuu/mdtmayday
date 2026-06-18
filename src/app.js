@@ -36,6 +36,98 @@ const RANK = [
   "Super Admin"
 ];
 
+
+const REPORT_TYPES = [
+  { id:"PATROLI", label:"PATROLI" },
+  { id:"KRIMINAL", label:"LAPORAN KRIMINAL" },
+  { id:"PENYITAAN_KENDARAAN", label:"LAPORAN PENYITAAN KENDARAAN" }
+];
+
+const ACTIVITY_CAP_BY_RANK = {
+  "CASIS": 5,
+  "Bharada": 8,
+  "Bharatu": 10,
+  "Bharaka": 12,
+  "Bripda": 14,
+  "Briptu": 16,
+  "Brigpol": 18,
+  "Bripka": 20,
+  "Aipda": 22,
+  "Aiptu": 24,
+  "Ipda": 28,
+  "Iptu": 32,
+  "AKP": 36,
+  "Kompol": 40,
+  "AKBP": 45,
+  "Kombes": 50,
+  "Brigjen": 60,
+  "Irjen": 70,
+  "Komjen": 80,
+  "Jenderal Polisi": 100,
+  "Super Admin": 999
+};
+
+function reportTypeLabel(type){
+  return REPORT_TYPES.find(x => x.id === type)?.label || type || "LAPORAN";
+}
+
+function activityCapFor(member){
+  return ACTIVITY_CAP_BY_RANK[member?.rank_detail] ?? ACTIVITY_CAP_BY_RANK[member?.jabatan] ?? 10;
+}
+
+function reportColleagueOptions(selected = []){
+  const set = new Set((selected || []).map(String));
+  return S.members
+    .filter(m => m.status === "ACTIVE" && m.id !== S.profile?.id)
+    .map(m => `<option value="${m.id}" ${set.has(String(m.id)) ? "selected" : ""}>${e(userDisplayName(m))} - ${e(m.rank_detail || m.jabatan || "-")} - ${e(m.divisi || "-")}</option>`)
+    .join("");
+}
+
+function getSelectedColleagues(){
+  const el = document.querySelector("#rep_colleagues");
+  return Array.from(el?.selectedOptions || []).map(o => Number(o.value)).filter(Boolean);
+}
+
+function canManageReports(){
+  return can(["PATI","SUPER ADMIN"]);
+}
+
+function canEditReport(r){
+  return canManageReports() || (r.user_id === S.profile?.id && ["PENDING","REJECTED"].includes(r.status));
+}
+
+function canDeleteReport(r){
+  return canManageReports();
+}
+
+async function addActivityPoint(userId, reason = "REPORT_APPROVED"){
+  const member = S.members.find(x => x.id === userId);
+  if(!member) return;
+
+  const period = monthKey();
+  const currentPeriod = member.activity_points_period || period;
+  const current = currentPeriod === period ? Number(member.activity_points_month || 0) : 0;
+  const cap = activityCapFor(member);
+  const next = Math.min(cap, current + 1);
+  const total = Number(member.activity_points_total || 0) + (next > current ? 1 : 0);
+
+  await supabase.from("profiles").update({
+    activity_points_period: period,
+    activity_points_month: next,
+    activity_points_total: total
+  }).eq("id", userId);
+
+  await audit("ADD_ACTIVITY_POINT", "profiles", userId, { reason, before: current, after: next, cap });
+}
+
+async function grantReportActivityPoints(report){
+  const payload = report.payload || {};
+  const ids = new Set([report.user_id, ...(payload.colleagues || []).map(Number)].filter(Boolean));
+  for(const id of ids){
+    await addActivityPoint(id, `REPORT_${report.id}_APPROVED`);
+  }
+}
+
 const HIGH = ["PATI","SUPER ADMIN"];
 const MAN = ["PATI","SUPER ADMIN"];
 const ATTENDANCE_APPROVER = ["PATI","SUPER ADMIN"];
@@ -854,39 +946,170 @@ async function rejectAttendance(id){
 }
 
 function reportsPage(){
-  const cats = ["PATROLI","PENANGKAPAN","PENGEJARAN","PENEMBAKAN","BACKUP","PERAMPOKAN","PENILANGAN","ADMINISTRASI"];
-  if(!S.currentReport) S.currentReport = cats[0];
+  if(!S.currentReport || !REPORT_TYPES.some(x => x.id === S.currentReport)) S.currentReport = "PATROLI";
 
   return `<main class="app">
     ${top("LAPORAN OPERASI")}
     <main class="page">
-      <section class="tabs">${cats.map(c => `
-        <button class="${S.currentReport===c ? "active" : ""}" onclick="setReportCat('${c}')">${c}</button>
+      <section class="tabs">${REPORT_TYPES.map(c => `
+        <button class="${S.currentReport===c.id ? "active" : ""}" onclick="setReportCat('${c.id}')">${c.label}</button>
       `).join("")}</section>
 
-      <section class="card">
-        <h2>${e(S.currentReport)}</h2>
-        <div class="row">
-          <div class="field"><label>Lokasi</label><input id="rep_location"/></div>
-          <div class="field"><label>Shift</label><select id="rep_shift"><option>PAGI</option><option>SIANG</option><option>MALAM</option></select></div>
-        </div>
-        <div class="field"><label>Kronologi</label><textarea id="rep_text"></textarea></div>
-        <div class="field"><label>Video Link</label><input id="rep_video"/></div>
-        <div class="field"><label>Bukti Foto Bisa Lebih Dari 1</label><input id="rep_file" type="file" accept="image/*" multiple/></div>
-        <button class="btn blue" onclick="submitReport()">KIRIM LAPORAN</button>
-      </section>
+      ${reportForm()}
 
       <section class="card">
-        <h2>RIWAYAT LAPORAN</h2>
-        ${S.reports.slice(0,30).map(r=>`<div class="list-item">
-          <h3>${e(r.type)} - ${e(r.nama)}</h3>
-          <div class="mini">${fmt(r.created_at)} • ${e(statusLabel(r.status))}</div>
-          <p>${e(r.payload?.report || "-")}</p>
-          <button class="btn small" onclick="exportReportPDF(${r.id})">EXPORT PDF</button>
-        </div>`).join("") || `<div class="empty">Belum ada laporan.</div>`}
+        <div class="section-head">
+          <div>
+            <h2>RIWAYAT LAPORAN</h2>
+            <p class="mini">Patroli, kriminal, dan penyitaan kendaraan dapat dilihat semua anggota.</p>
+          </div>
+        </div>
+        ${S.reports.filter(r => REPORT_TYPES.some(t => t.id === r.type)).slice(0,80).map(r=>reportItem(r)).join("") || `<div class="empty">Belum ada laporan.</div>`}
       </section>
     </main>${nav()}
   </main>`;
+}
+
+function reportForm(edit = null){
+  const p = S.profile;
+  const payload = edit?.payload || {};
+  const type = edit?.type || S.currentReport || "PATROLI";
+  const today = new Date().toISOString().slice(0,10);
+  const nowTime = new Date().toTimeString().slice(0,5);
+  const isPatrol = type === "PATROLI";
+  const isCriminal = type === "KRIMINAL";
+  const isSeizure = type === "PENYITAAN_KENDARAAN";
+
+  return `<section class="card report-form-card">
+    <h2>${edit ? "EDIT " : ""}${e(reportTypeLabel(type))}</h2>
+
+    <div class="kv">
+      <div><small>NAMA PETUGAS</small><strong>${e(userDisplayName(p))}</strong></div>
+      <div><small>RANK</small><strong>${e(p.rank_detail || p.jabatan || "-")}</strong></div>
+      <div><small>DIVISI</small><strong>${e(p.divisi || "-")}</strong></div>
+    </div>
+
+    <input id="rep_type" type="hidden" value="${e(type)}"/>
+
+    ${isPatrol ? `
+      <div class="row">
+        <div class="field">
+          <label>Tanggal Patroli</label>
+          <input id="rep_date" type="date" value="${e(payload.report_date || today)}"/>
+        </div>
+        <div class="field">
+          <label>Jam Patroli</label>
+          <input id="rep_time" type="time" value="${e(payload.report_time || nowTime)}"/>
+        </div>
+      </div>
+      <div class="field">
+        <label>Area Patroli</label>
+        <input id="rep_area" placeholder="Contoh: Las Venturas / Whitewood Estates" value="${e(payload.area || "")}"/>
+      </div>
+      <div class="field">
+        <label>Laporan Singkat Patroli</label>
+        <textarea id="rep_chronology">${e(payload.chronology || payload.report || "")}</textarea>
+      </div>
+      <div class="field">
+        <label>Foto Bukti Patroli Minimal 1 Foto</label>
+        <input id="rep_file" type="file" accept="image/*" multiple/>
+      </div>
+    ` : `
+      <div class="row">
+        <div class="field">
+          <label>${isCriminal ? "Tanggal Penahanan" : "Tanggal Penyitaan"}</label>
+          <input id="rep_date" type="date" value="${e(payload.report_date || today)}"/>
+        </div>
+        <div class="field">
+          <label>${isCriminal ? "Masa Hukuman" : "Masa Sita"}</label>
+          <input id="rep_duration" placeholder="${isCriminal ? "Contoh: 30 menit / 60 menit" : "Contoh: 3 hari / 7 hari"}" value="${e(payload.duration || "")}"/>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Kronologi</label>
+        <textarea id="rep_chronology">${e(payload.chronology || payload.report || "")}</textarea>
+      </div>
+
+      <div class="field">
+        <label>${isCriminal ? "Informasi Tersangka" : "Informasi Kendaraan"}</label>
+        <textarea id="rep_subject_info">${e(payload.subject_info || "")}</textarea>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Pasal</label>
+          <input id="rep_law" placeholder="Masukkan pasal" value="${e(payload.law || "")}"/>
+        </div>
+        <div class="field">
+          <label>Denda</label>
+          <input id="rep_fine" placeholder="Contoh: 50000" value="${e(payload.fine || "")}"/>
+        </div>
+      </div>
+
+      ${isCriminal ? `
+        <div class="field">
+          <label>Foto KTP Tersangka Minimal 1 Foto</label>
+          <input id="rep_file" type="file" accept="image/*" multiple/>
+        </div>
+      ` : `
+        <div class="field">
+          <label>Nama Plate / Nomor Plate Jika Ada</label>
+          <input id="rep_plate" placeholder="Contoh: MD 12345" value="${e(payload.plate || "")}"/>
+        </div>
+        <div class="field">
+          <label>Bukti Foto Kendaraan Minimal 1 Foto</label>
+          <input id="rep_file" type="file" accept="image/*" multiple/>
+        </div>
+      `}
+    `}
+
+    <div class="field">
+      <label>Nama Rekan</label>
+      <select id="rep_colleagues" multiple size="7">
+        ${reportColleagueOptions(payload.colleagues || [])}
+      </select>
+      <p class="mini">Tahan CTRL untuk pilih lebih dari satu rekan. Semua rekan akan dapat 1 activity point saat laporan di-ACC.</p>
+    </div>
+
+    <button class="btn blue" onclick="${edit ? `saveReport(${edit.id})` : "submitReport()"}">${edit ? "SIMPAN EDIT LAPORAN" : "KIRIM LAPORAN"}</button>
+    ${edit ? `<button class="btn red" onclick="closeModal()">BATAL</button>` : ""}
+  </section>`;
+}
+
+function reportItem(r){
+  const payload = r.payload || {};
+  const colleagues = (payload.colleagues || []).map(id => S.members.find(m => m.id === Number(id))).filter(Boolean);
+  const isPatrol = r.type === "PATROLI";
+  const isCriminal = r.type === "KRIMINAL";
+
+  return `<div class="list-item">
+    <h3>${e(reportTypeLabel(r.type))} - ${e(r.nama)}</h3>
+    <div class="mini">${fmt(r.created_at)} • <span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span></div>
+    <div class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.rank_detail || "-")} • ${e(r.divisi || "-")}</div>
+
+    ${isPatrol ? `
+      <p><b>Tanggal/Jam:</b> ${e(payload.report_date || "-")} ${e(payload.report_time || "")}</p>
+      <p><b>Area Patroli:</b> ${e(payload.area || "-")}</p>
+      <p><b>Laporan Singkat:</b> ${e(payload.chronology || "-")}</p>
+    ` : `
+      <p><b>Tanggal:</b> ${e(payload.report_date || "-")}</p>
+      <p><b>Kronologi:</b> ${e(payload.chronology || "-")}</p>
+      <p><b>${isCriminal ? "Tersangka" : "Kendaraan"}:</b> ${e(payload.subject_info || "-")}</p>
+      <p><b>Pasal:</b> ${e(payload.law || "-")} • <b>${isCriminal ? "Masa Hukuman" : "Masa Sita"}:</b> ${e(payload.duration || "-")} • <b>Denda:</b> ${e(payload.fine || "-")}</p>
+      ${r.type === "PENYITAAN_KENDARAAN" ? `<p><b>Plate:</b> ${e(payload.plate || "-")}</p>` : ""}
+    `}
+
+    ${colleagues.length ? `<p><b>Rekan:</b> ${colleagues.map(m => e(userDisplayName(m))).join(", ")}</p>` : ""}
+    ${renderEvidenceLinks(r)}
+    <div class="split-actions">
+      <button class="btn small" onclick="exportReportPDF(${r.id})">EXPORT PDF</button>
+      ${canEditReport(r) ? `<button class="btn small yellow" onclick="editReport(${r.id})">EDIT</button>` : ""}
+      ${canManageReports() && r.status === "PENDING" ? `<button class="btn small green" onclick="approveReport(${r.id})">ACC</button>` : ""}
+      ${canManageReports() && r.status === "PENDING" ? `<button class="btn small red" onclick="rejectReport(${r.id})">REJECT</button>` : ""}
+      ${canDeleteReport(r) ? `<button class="btn small red" onclick="deleteReport(${r.id})">HAPUS</button>` : ""}
+    </div>
+  </div>`;
 }
 
 function setReportCat(c){
@@ -897,21 +1120,56 @@ function setReportCat(c){
 async function submitReport(){
   try{
     const p = S.profile;
-    const files = document.querySelector("#rep_file").files;
-    const evidenceUrls = await uploadMany(files, "reports");
+    const type = document.querySelector("#rep_type")?.value || S.currentReport || "PATROLI";
+    const files = document.querySelector("#rep_file")?.files || [];
 
-    const payload = {
-      location: document.querySelector("#rep_location").value,
-      shift: document.querySelector("#rep_shift").value,
-      report: document.querySelector("#rep_text").value,
-      video: document.querySelector("#rep_video").value
+    if(!files || files.length < 1){
+      return alert("Semua laporan operasi wajib upload minimal 1 foto bukti.");
+    }
+
+    const evidenceUrls = await uploadMany(files, "reports");
+    const isPatrol = type === "PATROLI";
+    const isCriminal = type === "KRIMINAL";
+
+    let payload = {
+      report_date: document.querySelector("#rep_date")?.value || "",
+      chronology: document.querySelector("#rep_chronology")?.value || "",
+      colleagues: getSelectedColleagues()
     };
+
+    if(isPatrol){
+      payload = {
+        ...payload,
+        report_time: document.querySelector("#rep_time")?.value || "",
+        area: document.querySelector("#rep_area")?.value || ""
+      };
+
+      if(!payload.report_date) return alert("Tanggal patroli wajib diisi.");
+      if(!payload.report_time) return alert("Jam patroli wajib diisi.");
+      if(!payload.area.trim()) return alert("Area patroli wajib diisi.");
+      if(!payload.chronology.trim()) return alert("Laporan singkat patroli wajib diisi.");
+    } else {
+      payload = {
+        ...payload,
+        subject_info: document.querySelector("#rep_subject_info")?.value || "",
+        law: document.querySelector("#rep_law")?.value || "",
+        duration: document.querySelector("#rep_duration")?.value || "",
+        fine: document.querySelector("#rep_fine")?.value || "",
+        plate: document.querySelector("#rep_plate")?.value || ""
+      };
+
+      if(!payload.report_date) return alert("Tanggal laporan wajib diisi.");
+      if(!payload.chronology.trim()) return alert("Kronologi wajib diisi.");
+      if(!payload.subject_info.trim()) return alert(isCriminal ? "Informasi tersangka wajib diisi." : "Informasi kendaraan wajib diisi.");
+      if(!payload.law.trim()) return alert("Pasal wajib diisi.");
+    }
 
     const { error } = await supabase.from("reports").insert({
       user_id: p.id,
-      type: S.currentReport,
-      nama: p.display_name,
+      type,
+      nama: userDisplayName(p),
       divisi: p.divisi,
+      rank_detail: p.rank_detail,
       badge_number: p.badge_number || "",
       payload,
       evidence_url: evidenceUrls[0] || null,
@@ -921,9 +1179,9 @@ async function submitReport(){
 
     if(error) throw error;
 
-    await audit("CREATE_REPORT", "reports", "", { type:S.currentReport, payload });
+    await audit("CREATE_REPORT", "reports", "", { type, payload });
     await loadAll();
-    toast("Laporan masuk.", "success");
+    toast("Laporan masuk dan menunggu ACC.", "success");
     go("log");
     S.tab = "reports";
     render();
@@ -932,15 +1190,175 @@ async function submitReport(){
   }
 }
 
+
+function editReport(id){
+  const r = S.reports.find(x => x.id === id);
+  if(!r) return alert("Laporan tidak ditemukan.");
+  if(!canEditReport(r)) return alert("Laporan hanya bisa diedit oleh pengisi saat PENDING/REJECTED, atau oleh PATI/SUPER ADMIN.");
+  const modal = document.createElement("div");
+  modal.id = "modal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto";
+  modal.innerHTML = `<section style="max-width:820px;width:100%">${reportForm(r)}</section>`;
+  document.body.appendChild(modal);
+}
+
+async function saveReport(id){
+  const r = S.reports.find(x => x.id === id);
+  if(!r) return alert("Laporan tidak ditemukan.");
+  if(!canEditReport(r)) return alert("Akses edit ditolak.");
+
+  const files = document.querySelector("#rep_file")?.files || [];
+  const evidenceUrls = await uploadMany(files, "reports");
+  const oldUrls = getEvidenceList(r);
+  const type = r.type;
+  const isPatrol = type === "PATROLI";
+  const isCriminal = type === "KRIMINAL";
+
+  let payload = {
+    report_date: document.querySelector("#rep_date")?.value || "",
+    chronology: document.querySelector("#rep_chronology")?.value || "",
+    colleagues: getSelectedColleagues()
+  };
+
+  if(isPatrol){
+    payload = {
+      ...payload,
+      report_time: document.querySelector("#rep_time")?.value || "",
+      area: document.querySelector("#rep_area")?.value || ""
+    };
+  }else{
+    payload = {
+      ...payload,
+      subject_info: document.querySelector("#rep_subject_info")?.value || "",
+      law: document.querySelector("#rep_law")?.value || "",
+      duration: document.querySelector("#rep_duration")?.value || "",
+      fine: document.querySelector("#rep_fine")?.value || "",
+      plate: document.querySelector("#rep_plate")?.value || ""
+    };
+  }
+
+  if(!payload.report_date) return alert("Tanggal laporan wajib diisi.");
+  if(!payload.chronology.trim()) return alert(isPatrol ? "Laporan singkat patroli wajib diisi." : "Kronologi wajib diisi.");
+  if(isPatrol && !payload.area.trim()) return alert("Area patroli wajib diisi.");
+  if(!isPatrol && !payload.subject_info.trim()) return alert(isCriminal ? "Informasi tersangka wajib diisi." : "Informasi kendaraan wajib diisi.");
+  if(!isPatrol && !payload.law.trim()) return alert("Pasal wajib diisi.");
+
+  const finalEvidence = evidenceUrls.length ? evidenceUrls : oldUrls;
+  if(!finalEvidence.length) return alert("Semua laporan operasi wajib punya minimal 1 foto bukti.");
+
+  const update = {
+    payload,
+    evidence_urls: finalEvidence,
+    evidence_url: finalEvidence[0] || null
+  };
+
+  const { error } = await supabase.from("reports").update(update).eq("id", id);
+  if(error) return alert(error.message);
+
+  await audit("EDIT_REPORT", "reports", id, { before:r, after:update });
+  closeModal();
+  await loadAll();
+  toast("Laporan berhasil diedit.", "success");
+  render();
+}
+
+async function approveReport(id){
+  if(!canManageReports()) return alert("Hanya PATI / SUPER ADMIN yang bisa ACC laporan.");
+  const r = S.reports.find(x => x.id === id);
+  if(!r) return alert("Laporan tidak ditemukan.");
+  const note = prompt("Catatan ACC laporan") || "Disetujui";
+  const { error } = await supabase.from("reports").update({
+    status:"APPROVED",
+    approved_by:S.profile.display_name,
+    approval_note:note
+  }).eq("id", id);
+
+  if(error) return alert(error.message);
+
+  await grantReportActivityPoints(r);
+  await audit("APPROVE_REPORT", "reports", id, { note, report:r });
+  await botEvent("REPORT_APPROVED", {
+    id,
+    type:r.type,
+    nama:r.nama,
+    divisi:r.divisi,
+    approved_by:S.profile.display_name,
+    note
+  });
+
+  await loadAll();
+  toast("Laporan di-ACC. Activity point diberikan ke petugas dan rekan.", "success");
+  render();
+}
+
+async function rejectReport(id){
+  if(!canManageReports()) return alert("Hanya PATI / SUPER ADMIN yang bisa reject laporan.");
+  const r = S.reports.find(x => x.id === id);
+  const reason = prompt("Alasan reject laporan") || "Ditolak";
+  const { error } = await supabase.from("reports").update({
+    status:"REJECTED",
+    approved_by:S.profile.display_name,
+    reject_reason:reason
+  }).eq("id", id);
+
+  if(error) return alert(error.message);
+
+  await audit("REJECT_REPORT", "reports", id, { reason, report:r });
+  await botEvent("REPORT_REJECTED", {
+    id,
+    type:r?.type,
+    nama:r?.nama,
+    divisi:r?.divisi,
+    rejected_by:S.profile.display_name,
+    reason
+  });
+
+  await loadAll();
+  toast("Laporan ditolak. Pengisi masih bisa edit ulang.", "info");
+  render();
+}
+
+async function deleteReport(id){
+  if(!canDeleteReport()) return alert("Hanya PATI / SUPER ADMIN yang bisa hapus laporan.");
+  const r = S.reports.find(x => x.id === id);
+  if(!confirm("Yakin hapus laporan ini?")) return;
+  const { error } = await supabase.from("reports").delete().eq("id", id);
+  if(error) return alert(error.message);
+  await audit("DELETE_REPORT", "reports", id, r || {});
+  await botEvent("REPORT_DELETED", { id, report:r, deleted_by:S.profile.display_name });
+  await loadAll();
+  toast("Laporan dihapus.", "success");
+  render();
+}
+
+
 function exportReportPDF(id){
   const r = S.reports.find(x => x.id === id);
   if(!r) return alert("Laporan tidak ditemukan.");
 
   const urls = getEvidenceList(r);
+  const payload = r.payload || {};
+  const isPatrol = r.type === "PATROLI";
+  const isCriminal = r.type === "KRIMINAL";
+
+  const detailRows = isPatrol ? `
+    <tr><th>Tanggal/Jam Patroli</th><td>${e(payload.report_date || "-")} ${e(payload.report_time || "")}</td></tr>
+    <tr><th>Area Patroli</th><td>${e(payload.area || "-")}</td></tr>
+    <tr><th>Laporan Singkat</th><td>${e(payload.chronology || "-")}</td></tr>
+  ` : `
+    <tr><th>Tanggal</th><td>${e(payload.report_date || "-")}</td></tr>
+    <tr><th>Kronologi</th><td>${e(payload.chronology || "-")}</td></tr>
+    <tr><th>${isCriminal ? "Informasi Tersangka" : "Informasi Kendaraan"}</th><td>${e(payload.subject_info || "-")}</td></tr>
+    <tr><th>Pasal</th><td>${e(payload.law || "-")}</td></tr>
+    <tr><th>${isCriminal ? "Masa Hukuman" : "Masa Sita"}</th><td>${e(payload.duration || "-")}</td></tr>
+    <tr><th>Denda</th><td>${e(payload.fine || "-")}</td></tr>
+    ${r.type === "PENYITAAN_KENDARAAN" ? `<tr><th>Plate</th><td>${e(payload.plate || "-")}</td></tr>` : ""}
+  `;
+
   const html = `<!doctype html>
 <html>
 <head>
-  <title>Laporan ${e(r.type)} #${r.id}</title>
+  <title>${e(reportTypeLabel(r.type))} #${r.id}</title>
   <style>
     body{font-family:Arial,sans-serif;padding:30px;color:#111}
     h1{border-bottom:3px solid #000;padding-bottom:10px}
@@ -951,18 +1369,16 @@ function exportReportPDF(id){
   </style>
 </head>
 <body>
-  <h1>MAYDAY POLICE - LAPORAN ${e(r.type)}</h1>
+  <h1>MAYDAY POLICE - ${e(reportTypeLabel(r.type))}</h1>
   <p class="muted">Generated: ${fmt(new Date())}</p>
   <table>
-    <tr><th>Nama</th><td>${e(r.nama)}</td></tr>
+    <tr><th>Nama Petugas</th><td>${e(r.nama)}</td></tr>
     <tr><th>Badge</th><td>${e(r.badge_number || "NO BADGE")}</td></tr>
+    <tr><th>Rank</th><td>${e(r.rank_detail || "-")}</td></tr>
     <tr><th>Divisi</th><td>${e(r.divisi)}</td></tr>
     <tr><th>Status</th><td>${e(statusLabel(r.status))}</td></tr>
-    <tr><th>Lokasi</th><td>${e(r.payload?.location || "-")}</td></tr>
-    <tr><th>Shift</th><td>${e(r.payload?.shift || "-")}</td></tr>
-    <tr><th>Kronologi</th><td>${e(r.payload?.report || "-")}</td></tr>
-    <tr><th>Video</th><td>${e(r.payload?.video || "-")}</td></tr>
-    <tr><th>Waktu</th><td>${fmt(r.created_at)}</td></tr>
+    ${detailRows}
+    <tr><th>Waktu Input</th><td>${fmt(r.created_at)}</td></tr>
   </table>
   <h2>Bukti Visual</h2>
   ${urls.length ? urls.map(u=>`<img src="${e(u)}"/>`).join("") : "<p>Tidak ada bukti.</p>"}
@@ -1019,7 +1435,7 @@ function memberMini(m, showActions=false){
     </h3>
     <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan || "-")} • ${e(m.divisi || "-")}</div>
     <div class="mini">Last login: ${fmt(m.last_login)} • Last seen: ${fmt(m.last_seen)}</div>
-    <div class="mini">Absensi bulan ini: ${monthTotal} • Riwayat SP: ${spTotal}</div>
+    <div class="mini">Absensi bulan ini: ${monthTotal} • Riwayat SP: ${spTotal} • Activity: ${Number(m.activity_points_month || 0)}/${activityCapFor(m)}</div>
     ${showActions ? `<button class="btn small" onclick="openMemberDetail(${m.id})">DETAIL RIWAYAT</button>` : ""}
     ${admin() && showActions ? `<button class="btn small yellow" onclick="openMemberEditor(${m.id})">EDIT USERNAME / BADGE / JABATAN</button>` : ""}
   </div>`;
@@ -1613,6 +2029,11 @@ Object.assign(window, {
   setReportCat,
   submitReport,
   exportReportPDF,
+  deleteReport,
+  rejectReport,
+  approveReport,
+  saveReport,
+  editReport,
   submitSP,
   deleteSP,
   submitPayroll,
