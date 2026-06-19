@@ -353,8 +353,8 @@ let lastPersonnelRefreshAt = 0;
 const POINTS_PER_HOUR = 10;
 const PAYROLL_PER_POINT = 1000;
 const MIN_DUTY_MINUTES = 30;
-const PAGE_LOADING_MS = 3000;
-const ACTION_LOADING_MS = 3000;
+const PAGE_LOADING_MS = 2000;
+const ACTION_LOADING_MS = 2000;
 
 function money(v){
   return new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", maximumFractionDigits:0 }).format(Number(v || 0));
@@ -469,7 +469,15 @@ function drawToasts(){
   box.innerHTML = S.notifications.map(n => `<div class="toast ${e(n.type)}">${e(n.message)}</div>`).join("");
 }
 function loadingOverlay(){
-  return S.loading ? `<div class="loading-screen"><div class="loading-card"><img src="/logo.png"/><h2>MAYDAY MDT</h2><p>${e(S.loadingText || "Loading...")}</p><div class="loader-line"><span></span></div></div></div>` : "";
+  if(!S.loading) return "";
+  return `<div class="loading-screen" data-loading="${Date.now()}">
+    <div class="loading-card">
+      <img src="/logo.png"/>
+      <h2>MAYDAY MDT</h2>
+      <p>${e(S.loadingText || "Loading...")}</p>
+      <div class="loader-line"><span></span></div>
+    </div>
+  </div>`;
 }
 function skeletonPage(title = "MEMUAT"){
   return `<main class="app">${top(title)}<main class="page">

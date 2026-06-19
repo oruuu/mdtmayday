@@ -1179,41 +1179,69 @@ html[data-theme="dark"] .report-archive-pre{
 
 
 /* ===============================
-   LOADING BAR FIX - 3 DETIK FULL
-   Pakai pseudo element supaya animasi jalan stabil di Chrome
+   FINAL LOADING BAR FIX - 2 DETIK
+   Override paling bawah agar tidak kalah dari CSS lama.
 ================================== */
+.loading-screen{
+  position:fixed!important;
+  inset:0!important;
+  z-index:99999!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  background:rgba(2,6,23,.72)!important;
+  backdrop-filter:blur(8px)!important;
+  padding:20px!important;
+}
+
+.loading-card{
+  width:min(360px,92vw)!important;
+  background:var(--surface,#fff)!important;
+  color:var(--ink,#061126)!important;
+  border:5px solid #000!important;
+  border-radius:28px!important;
+  box-shadow:14px 14px 0 #000!important;
+  padding:28px 22px!important;
+  text-align:center!important;
+}
+
 .loader-line{
   position:relative!important;
-  height:20px!important;
+  height:18px!important;
+  width:100%!important;
   border:4px solid #000!important;
   border-radius:999px!important;
   overflow:hidden!important;
-  background:#e5e7eb!important;
+  background:#e2e8f0!important;
   box-shadow:4px 4px 0 #000!important;
 }
 
 .loader-line span{
-  position:relative!important;
   display:block!important;
-  width:100%!important;
-  height:100%!important;
-  background:transparent!important;
-  border-right:0!important;
-  transform:none!important;
-  animation:none!important;
-}
-
-.loader-line span::before{
-  content:""!important;
   position:absolute!important;
-  inset:0!important;
-  background:linear-gradient(90deg,var(--blue),var(--green),var(--yellow))!important;
+  top:0!important;
+  left:0!important;
+  height:100%!important;
+  width:100%!important;
+  background:linear-gradient(90deg,var(--blue,#2663ff),var(--green,#8cff3a),var(--yellow,#ffd400))!important;
+  border-right:0!important;
   transform-origin:left center!important;
   transform:scaleX(0)!important;
-  animation:maydayLoadingBarFull 3s linear forwards!important;
+  animation:maydayLoadingBar2s 2s linear forwards!important;
+  will-change:transform!important;
 }
 
-@keyframes maydayLoadingBarFull{
-  0%{transform:scaleX(0)}
-  100%{transform:scaleX(1)}
+@keyframes maydayLoadingBar2s{
+  0%{transform:scaleX(0)!important}
+  100%{transform:scaleX(1)!important}
+}
+
+/* Skeleton shimmer dipercepat jadi 2 detik, biar match loading baru */
+.skeleton{
+  animation:skeletonMove2s 2s ease infinite!important;
+}
+
+@keyframes skeletonMove2s{
+  0%{background-position:100% 0}
+  100%{background-position:0 0}
 }
