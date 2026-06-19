@@ -684,7 +684,7 @@ function go(page){
     else S.tab = "today";
     S.loading = false;
     render();
-  }, 180);
+  }, 2000);
 }
 
 function setTab(tab){
