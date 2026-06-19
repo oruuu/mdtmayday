@@ -30,7 +30,7 @@ const DIV = ["CASIS","SABHARA","SATBRIMOB","SATLANTAS","POLAIRUD","BARESKRIM","S
 const JAB = ["CASIS","TAMTAMA","BINTARA","PAMA","PAMEN","PATI","SUPER ADMIN"];
 const RANK = [
   "CASIS",
-  "Bharada","Bharatu","Bharaka",
+  "TAMTAMA",
   "Bripda","Briptu","Brigpol","Bripka","Aipda","Aiptu",
   "Ipda","Iptu","AKP",
   "Kompol","AKBP","Kombes",
@@ -47,9 +47,7 @@ const REPORT_TYPES = [
 
 const ACTIVITY_CAP_BY_RANK = {
   "CASIS": 20,
-  "Bharada": 30,
-  "Bharatu": 50,
-  "Bharaka": 65,
+  "TAMTAMA": 65,
   "Bripda": 75,
   "Briptu": 85,
   "Brigpol": 95,
@@ -76,12 +74,20 @@ const REPORT_ACTIVITY_POINTS = {
   "KRIMINAL": 3
 };
 
+
+function normalizeRank(rank){
+  const r = String(rank || "").trim();
+  if(["Bharada","Bharatu","Bharaka","BHARADA","BHARATU","BHARAKA"].includes(r)) return "TAMTAMA";
+  return r;
+}
+
 function reportPointValue(type){
   return REPORT_ACTIVITY_POINTS[type] || 1;
 }
 
 function rankIndex(rank){
-  return RANK.findIndex(x => String(x).toLowerCase() === String(rank || "").toLowerCase());
+  const r = normalizeRank(rank);
+  return RANK.findIndex(x => String(x).toLowerCase() === String(r || "").toLowerCase());
 }
 
 function nextRank(rank){
@@ -92,11 +98,12 @@ function nextRank(rank){
 }
 
 function isUnlimitedRank(rank){
-  return ["PATI","SUPER ADMIN","Brigjen","Irjen","Komjen","Jenderal Polisi","Super Admin"].includes(rank);
+  const r = normalizeRank(rank);
+  return ["PATI","SUPER ADMIN","Brigjen","Irjen","Komjen","Jenderal Polisi","Super Admin"].includes(r);
 }
 
 function rankProgress(member = S.profile){
-  const rank = member?.rank_detail || member?.jabatan || "CASIS";
+  const rank = normalizeRank(member?.rank_detail || member?.jabatan || "CASIS");
   const point = Number(member?.activity_points_month || 0);
   const cap = activityCapFor(member);
   const unlimited = isUnlimitedRank(rank) || cap >= 999999;
@@ -242,7 +249,8 @@ function reportTypeLabel(type){
 }
 
 function activityCapFor(member){
-  return ACTIVITY_CAP_BY_RANK[member?.rank_detail] ?? ACTIVITY_CAP_BY_RANK[member?.jabatan] ?? 10;
+  const rank = normalizeRank(member?.rank_detail || member?.jabatan);
+  return ACTIVITY_CAP_BY_RANK[rank] ?? 10;
 }
 
 function reportColleagueOptions(selected = []){
