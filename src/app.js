@@ -470,12 +470,21 @@ function drawToasts(){
 }
 function loadingOverlay(){
   if(!S.loading) return "";
-  return `<div class="loading-screen" data-loading="${Date.now()}">
+  const key = Date.now();
+  return `<div class="loading-screen" data-loading="${key}">
     <div class="loading-card">
       <img src="/logo.png"/>
       <h2>MAYDAY MDT</h2>
       <p>${e(S.loadingText || "Loading...")}</p>
-      <div class="loader-line"><span></span></div>
+      <div class="loader-line">
+        <span class="loader-fill" style="animation-name:maydayLoadingBar_${key}"></span>
+      </div>
+      <style>
+        @keyframes maydayLoadingBar_${key}{
+          from{width:0%}
+          to{width:100%}
+        }
+      </style>
     </div>
   </div>`;
 }
