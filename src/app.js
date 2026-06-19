@@ -18,7 +18,6 @@ const S = {
   divisionHistory: [],
   promotionRequests: [],
   currentReport: "PATROLI",
-  archiveMonth: new Date().toISOString().slice(0,7),
   loading: false,
   loadingText: "Memuat data MDT...",
   realtimeReady: false,
@@ -41,7 +40,7 @@ const RANK = [
 
 const REPORT_TYPES = [
   { id:"PATROLI", label:"PATROLI" },
-  { id:"KRIMINAL", label:"LAPORAN PENANGKAPAN" },
+  { id:"KRIMINAL", label:"LAPORAN KRIMINAL" },
   { id:"PENYITAAN_KENDARAAN", label:"LAPORAN PENYITAAN KENDARAAN" }
 ];
 
@@ -104,109 +103,6 @@ function rankProgress(member = S.profile){
   const target = nextRank(rank);
   const eligible = !unlimited && point >= cap && !!target;
   return { rank, point, cap, unlimited, pct, target, eligible };
-}
-
-
-function reportMonthKey(r){
-  const p = r.payload || {};
-  const dt = p.arrest_datetime || p.report_date || r.created_at;
-  return String(dt || "").slice(0,7);
-}
-
-function reportVisibleInMain(r){
-  return REPORT_TYPES.some(t => t.id === r.type) && !["ARCHIVED","DELETED"].includes(String(r.status || "").toUpperCase());
-}
-
-function reportVisibleInArchive(r){
-  const st = String(r.status || "").toUpperCase();
-  if(canManageReports()) return ["ARCHIVED","DELETED"].includes(st);
-  return st === "ARCHIVED";
-}
-
-function reportArchiveStats(month = S.archiveMonth){
-  const rows = S.reports.filter(r => reportVisibleInArchive(r) && reportMonthKey(r) === month);
-  return {
-    patrol: rows.filter(r => r.type === "PATROLI").length,
-    arrest: rows.filter(r => r.type === "KRIMINAL").length,
-    seizure: rows.filter(r => r.type === "PENYITAAN_KENDARAAN").length,
-    total: rows.length
-  };
-}
-
-function setArchiveMonth(v){
-  S.archiveMonth = v || monthKey();
-  render();
-}
-
-function formatArrestReport(r){
-  const p = r.payload || {};
-  const colleagues = (p.colleagues || []).map(id => S.members.find(m => m.id === Number(id))).filter(Boolean);
-  return `LAPORAN PENANGKAPAN
-
-I. Informasi Penahanan.
-- Tanggal dan Waktu Penahanan: ${p.arrest_datetime || "-"}
-- Lokasi Penahanan            : ${p.detention_location || "-"}
-- Deskripsi Singkat           : ${p.summary || p.chronology || "-"}
-
-II. Informasi Tersangka:
-- Nama Tersangka             : ${p.suspect_name || p.subject_info || "-"}
-- Pasal                      : ${p.law || "-"}
-- Denda                      : ${p.fine || "-"}
-- Hukuman/Masa Tahanan       : ${p.sentence || p.duration || "-"}
-
-III. Identitas Petugas yang Menahan.
-- Nama Petugas               : ${r.nama || "-"}
-- Divisi                     : ${r.divisi || "-"}
-- Pangkat                    : ${r.rank_detail || "-"}
-- Jabatan                    : ${r.jabatan || "-"}
-- Rekan                      : ${colleagues.length ? colleagues.map(m => userDisplayName(m)).join(", ") : "-"}
-- Jenis Barang Bukti         : ${p.evidence_type || "-"}
-
-Note: Bukti KTP & Barang Bukti wajib diunggah melalui tombol lampiran media di bawah.`;
-}
-
-function reportArchivePanel(){
-  const month = S.archiveMonth || monthKey();
-  const stats = reportArchiveStats(month);
-  const rows = S.reports.filter(r => reportVisibleInArchive(r) && reportMonthKey(r) === month);
-
-  return `<section class="card archive-panel">
-    <div class="section-head">
-      <div>
-        <h2>ARSIP LAPORAN BULANAN</h2>
-        <p class="mini">Arsip laporan patroli, penangkapan, dan penyitaan kendaraan per bulan.</p>
-      </div>
-      <span class="status APPROVED">${stats.total} ARSIP</span>
-    </div>
-
-    <div class="row">
-      <div class="field">
-        <label>Bulan Arsip</label>
-        <input type="month" value="${e(month)}" onchange="setArchiveMonth(this.value)"/>
-      </div>
-      <div class="field">
-        <label>Statistik</label>
-        <input readonly value="Patroli ${stats.patrol} | Penangkapan ${stats.arrest} | Penyitaan ${stats.seizure}"/>
-      </div>
-    </div>
-
-    ${canManageReports() ? `<div class="split-actions">
-      <button class="btn small yellow" onclick="archiveMonthlyReports()">ARSIPKAN BULAN INI</button>
-      <button class="btn small red" onclick="deleteArchivedMonth()">HAPUS ARSIP BULAN INI</button>
-    </div>` : ""}
-
-    <div class="archive-list">
-      ${rows.map(r => `<div class="list-item">
-        <h3>${e(reportTypeLabel(r.type))} - ${e(r.nama)}</h3>
-        <div class="mini">${e(reportMonthKey(r))} • <span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span></div>
-        ${r.type === "KRIMINAL" ? `<pre class="report-archive-pre">${e(formatArrestReport(r))}</pre>` : `<p>${e((r.payload || {}).chronology || (r.payload || {}).summary || (r.payload || {}).area || "-")}</p>`}
-        ${renderEvidenceLinks(r)}
-        ${canManageReports() ? `<div class="split-actions">
-          ${String(r.status).toUpperCase() === "DELETED" ? `<button class="btn small green" onclick="restoreReport(${r.id})">RESTORE</button>` : `<button class="btn small red" onclick="softDeleteReport(${r.id})">HAPUS</button>`}
-        </div>` : ""}
-      </div>`).join("") || `<div class="empty">Belum ada arsip pada bulan ini.</div>`}
-    </div>
-  </section>`;
 }
 
 function reportTypeLabel(type){
@@ -382,8 +278,7 @@ const STATUS_LABEL = {
   SUSPENDED: "DIBEKUKAN",
   PTDH: "PTDH",
   REJECTED: "DITOLAK",
-  DELETED: "DIHAPUS",
-  ARCHIVED: "DIARSIPKAN"
+  DELETED: "DIHAPUS"
 };
 
 function statusLabel(status){
@@ -1152,16 +1047,15 @@ function reportsPage(){
       `).join("")}</section>
 
       ${reportForm()}
-      ${reportArchivePanel()}
 
       <section class="card">
         <div class="section-head">
           <div>
-            <h2>RIWAYAT LAPORAN AKTIF</h2>
-            <p class="mini">Laporan aktif yang belum masuk arsip bulanan.</p>
+            <h2>RIWAYAT LAPORAN</h2>
+            <p class="mini">Patroli, kriminal, dan penyitaan kendaraan dapat dilihat semua anggota.</p>
           </div>
         </div>
-        ${S.reports.filter(reportVisibleInMain).slice(0,80).map(r=>reportItem(r)).join("") || `<div class="empty">Belum ada laporan aktif.</div>`}
+        ${S.reports.filter(r => REPORT_TYPES.some(t => t.id === r.type)).slice(0,80).map(r=>reportItem(r)).join("") || `<div class="empty">Belum ada laporan.</div>`}
       </section>
     </main>${nav()}
   </main>`;
@@ -1174,7 +1068,7 @@ function reportForm(edit = null){
   const today = new Date().toISOString().slice(0,10);
   const nowTime = new Date().toTimeString().slice(0,5);
   const isPatrol = type === "PATROLI";
-  const isArrest = type === "KRIMINAL";
+  const isCriminal = type === "KRIMINAL";
   const isSeizure = type === "PENYITAAN_KENDARAAN";
 
   return `<section class="card report-form-card">
@@ -1190,59 +1084,84 @@ function reportForm(edit = null){
 
     ${isPatrol ? `
       <div class="row">
-        <div class="field"><label>Tanggal Patroli</label><input id="rep_date" type="date" value="${e(payload.report_date || today)}"/></div>
-        <div class="field"><label>Jam Patroli</label><input id="rep_time" type="text" inputmode="numeric" maxlength="5" placeholder="20:00" value="${e(payload.report_time || nowTime)}"/></div>
+        <div class="field">
+          <label>Tanggal Patroli</label>
+          <input id="rep_date" type="date" value="${e(payload.report_date || today)}"/>
+        </div>
+        <div class="field">
+          <label>Jam Patroli</label>
+          <input id="rep_time" type="time" value="${e(payload.report_time || nowTime)}"/>
+        </div>
       </div>
-      <div class="field"><label>Area Patroli</label><input id="rep_area" placeholder="Contoh: Las Venturas / Whitewood Estates" value="${e(payload.area || "")}"/></div>
-      <div class="field"><label>Laporan Singkat Patroli</label><textarea id="rep_chronology">${e(payload.chronology || payload.report || "")}</textarea></div>
-      <div class="field"><label>Foto Bukti Patroli Minimal 1 Foto</label><input id="rep_file" type="file" accept="image/*" multiple/></div>
-    ` : isArrest ? `
-      <div class="report-template-box">
-        <b>ARSIP LAPORAN BARU DITERIMA - KATEGORI: PENANGKAPAN</b>
-        <span>Laporan akan disusun otomatis sesuai format arsip penangkapan.</span>
+      <div class="field">
+        <label>Area Patroli</label>
+        <input id="rep_area" placeholder="Contoh: Las Venturas / Whitewood Estates" value="${e(payload.area || "")}"/>
       </div>
-
-      <h3>I. Informasi Penahanan</h3>
-      <div class="row">
-        <div class="field"><label>Tanggal Penahanan</label><input id="rep_date" type="date" value="${e(payload.report_date || today)}"/></div>
-        <div class="field"><label>Waktu Penahanan</label><input id="rep_time" type="text" inputmode="numeric" maxlength="5" placeholder="20:00" value="${e(payload.report_time || nowTime)}"/></div>
+      <div class="field">
+        <label>Laporan Singkat Patroli</label>
+        <textarea id="rep_chronology">${e(payload.chronology || payload.report || "")}</textarea>
       </div>
-      <div class="field"><label>Lokasi Penahanan</label><input id="rep_detention_location" placeholder="Contoh: Pershing Square / Kantor Polisi" value="${e(payload.detention_location || "")}"/></div>
-      <div class="field"><label>Deskripsi Singkat</label><textarea id="rep_summary">${e(payload.summary || payload.chronology || "")}</textarea></div>
-
-      <h3>II. Informasi Tersangka</h3>
-      <div class="field"><label>Nama Tersangka</label><input id="rep_suspect_name" placeholder="Nama lengkap tersangka" value="${e(payload.suspect_name || payload.subject_info || "")}"/></div>
-      <div class="row">
-        <div class="field"><label>Pasal</label><input id="rep_law" placeholder="Masukkan pasal" value="${e(payload.law || "")}"/></div>
-        <div class="field"><label>Denda</label><input id="rep_fine" placeholder="Contoh: 50000" value="${e(payload.fine || "")}"/></div>
+      <div class="field">
+        <label>Foto Bukti Patroli Minimal 1 Foto</label>
+        <input id="rep_file" type="file" accept="image/*" multiple/>
       </div>
-      <div class="field"><label>Hukuman / Masa Tahanan</label><input id="rep_sentence" placeholder="Contoh: 60 menit" value="${e(payload.sentence || payload.duration || "")}"/></div>
-
-      <h3>III. Identitas Petugas</h3>
-      <div class="field"><label>Rekan Petugas</label><select id="rep_colleagues" multiple size="7">${reportColleagueOptions(payload.colleagues || [])}</select></div>
-
-      <h3>IV. Barang Bukti</h3>
-      <div class="field"><label>Jenis Barang Bukti</label><input id="rep_evidence_type" placeholder="Contoh: Senjata tajam / Narkotika / Uang tunai" value="${e(payload.evidence_type || "")}"/></div>
-      <div class="field"><label>Keterangan Barang Bukti</label><textarea id="rep_evidence_desc">${e(payload.evidence_desc || "")}</textarea></div>
-      <div class="field"><label>Bukti KTP & Barang Bukti Minimal 1 Foto</label><input id="rep_file" type="file" accept="image/*" multiple/></div>
     ` : `
       <div class="row">
-        <div class="field"><label>Tanggal Penyitaan</label><input id="rep_date" type="date" value="${e(payload.report_date || today)}"/></div>
-        <div class="field"><label>Masa Sita</label><input id="rep_duration" placeholder="Contoh: 3 hari / 7 hari" value="${e(payload.duration || "")}"/></div>
+        <div class="field">
+          <label>${isCriminal ? "Tanggal Penahanan" : "Tanggal Penyitaan"}</label>
+          <input id="rep_date" type="date" value="${e(payload.report_date || today)}"/>
+        </div>
+        <div class="field">
+          <label>${isCriminal ? "Masa Hukuman" : "Masa Sita"}</label>
+          <input id="rep_duration" placeholder="${isCriminal ? "Contoh: 30 menit / 60 menit" : "Contoh: 3 hari / 7 hari"}" value="${e(payload.duration || "")}"/>
+        </div>
       </div>
-      <div class="field"><label>Kronologi</label><textarea id="rep_chronology">${e(payload.chronology || payload.report || "")}</textarea></div>
-      <div class="field"><label>Informasi Kendaraan</label><textarea id="rep_subject_info">${e(payload.subject_info || "")}</textarea></div>
+
+      <div class="field">
+        <label>Kronologi</label>
+        <textarea id="rep_chronology">${e(payload.chronology || payload.report || "")}</textarea>
+      </div>
+
+      <div class="field">
+        <label>${isCriminal ? "Informasi Tersangka" : "Informasi Kendaraan"}</label>
+        <textarea id="rep_subject_info">${e(payload.subject_info || "")}</textarea>
+      </div>
+
       <div class="row">
-        <div class="field"><label>Pasal</label><input id="rep_law" placeholder="Masukkan pasal" value="${e(payload.law || "")}"/></div>
-        <div class="field"><label>Denda</label><input id="rep_fine" placeholder="Contoh: 50000" value="${e(payload.fine || "")}"/></div>
+        <div class="field">
+          <label>Pasal</label>
+          <input id="rep_law" placeholder="Masukkan pasal" value="${e(payload.law || "")}"/>
+        </div>
+        <div class="field">
+          <label>Denda</label>
+          <input id="rep_fine" placeholder="Contoh: 50000" value="${e(payload.fine || "")}"/>
+        </div>
       </div>
-      <div class="field"><label>Nama Plate / Nomor Plate Jika Ada</label><input id="rep_plate" placeholder="Contoh: MD 12345" value="${e(payload.plate || "")}"/></div>
-      <div class="field"><label>Bukti Foto Kendaraan Minimal 1 Foto</label><input id="rep_file" type="file" accept="image/*" multiple/></div>
-      <div class="field"><label>Nama Rekan</label><select id="rep_colleagues" multiple size="7">${reportColleagueOptions(payload.colleagues || [])}</select></div>
+
+      ${isCriminal ? `
+        <div class="field">
+          <label>Foto KTP Tersangka Minimal 1 Foto</label>
+          <input id="rep_file" type="file" accept="image/*" multiple/>
+        </div>
+      ` : `
+        <div class="field">
+          <label>Nama Plate / Nomor Plate Jika Ada</label>
+          <input id="rep_plate" placeholder="Contoh: MD 12345" value="${e(payload.plate || "")}"/>
+        </div>
+        <div class="field">
+          <label>Bukti Foto Kendaraan Minimal 1 Foto</label>
+          <input id="rep_file" type="file" accept="image/*" multiple/>
+        </div>
+      `}
     `}
 
-    ${isPatrol ? `<div class="field"><label>Nama Rekan</label><select id="rep_colleagues" multiple size="7">${reportColleagueOptions(payload.colleagues || [])}</select></div>` : ""}
-    <p class="mini">Tahan CTRL untuk pilih lebih dari satu rekan. Rekan mendapat activity point saat laporan di-ACC.</p>
+    <div class="field">
+      <label>Nama Rekan</label>
+      <select id="rep_colleagues" multiple size="7">
+        ${reportColleagueOptions(payload.colleagues || [])}
+      </select>
+      <p class="mini">Tahan CTRL untuk pilih lebih dari satu rekan. Semua rekan akan dapat 1 activity point saat laporan di-ACC.</p>
+    </div>
 
     <button class="btn blue" onclick="${edit ? `saveReport(${edit.id})` : "submitReport()"}">${edit ? "SIMPAN EDIT LAPORAN" : "KIRIM LAPORAN"}</button>
     ${edit ? `<button class="btn red" onclick="closeModal()">BATAL</button>` : ""}
@@ -1253,36 +1172,33 @@ function reportItem(r){
   const payload = r.payload || {};
   const colleagues = (payload.colleagues || []).map(id => S.members.find(m => m.id === Number(id))).filter(Boolean);
   const isPatrol = r.type === "PATROLI";
-  const isArrest = r.type === "KRIMINAL";
-  const isSeizure = r.type === "PENYITAAN_KENDARAAN";
+  const isCriminal = r.type === "KRIMINAL";
 
   return `<div class="list-item">
     <h3>${e(reportTypeLabel(r.type))} - ${e(r.nama)}</h3>
-    <div class="mini">${fmt(r.created_at)} • <span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span> • ${reportPointValue(r.type)} activity point</div>
+    <div class="mini">${fmt(r.created_at)} • <span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span></div>
     <div class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.rank_detail || "-")} • ${e(r.divisi || "-")}</div>
 
     ${isPatrol ? `
       <p><b>Tanggal/Jam:</b> ${e(payload.report_date || "-")} ${e(payload.report_time || "")}</p>
       <p><b>Area Patroli:</b> ${e(payload.area || "-")}</p>
       <p><b>Laporan Singkat:</b> ${e(payload.chronology || "-")}</p>
-    ` : isArrest ? `
-      <pre class="report-archive-pre">${e(formatArrestReport(r))}</pre>
     ` : `
       <p><b>Tanggal:</b> ${e(payload.report_date || "-")}</p>
       <p><b>Kronologi:</b> ${e(payload.chronology || "-")}</p>
-      <p><b>Kendaraan:</b> ${e(payload.subject_info || "-")}</p>
-      <p><b>Pasal:</b> ${e(payload.law || "-")} • <b>Masa Sita:</b> ${e(payload.duration || "-")} • <b>Denda:</b> ${e(payload.fine || "-")}</p>
-      ${isSeizure ? `<p><b>Plate:</b> ${e(payload.plate || "-")}</p>` : ""}
+      <p><b>${isCriminal ? "Tersangka" : "Kendaraan"}:</b> ${e(payload.subject_info || "-")}</p>
+      <p><b>Pasal:</b> ${e(payload.law || "-")} • <b>${isCriminal ? "Masa Hukuman" : "Masa Sita"}:</b> ${e(payload.duration || "-")} • <b>Denda:</b> ${e(payload.fine || "-")}</p>
+      ${r.type === "PENYITAAN_KENDARAAN" ? `<p><b>Plate:</b> ${e(payload.plate || "-")}</p>` : ""}
     `}
 
     ${colleagues.length ? `<p><b>Rekan:</b> ${colleagues.map(m => e(userDisplayName(m))).join(", ")}</p>` : ""}
     ${renderEvidenceLinks(r)}
     <div class="split-actions">
+      <button class="btn small" onclick="exportReportPDF(${r.id})">EXPORT PDF</button>
       ${canEditReport(r) ? `<button class="btn small yellow" onclick="editReport(${r.id})">EDIT</button>` : ""}
       ${canManageReports() && r.status === "PENDING" ? `<button class="btn small green" onclick="approveReport(${r.id})">ACC</button>` : ""}
       ${canManageReports() && r.status === "PENDING" ? `<button class="btn small red" onclick="rejectReport(${r.id})">REJECT</button>` : ""}
-      ${canManageReports() && r.status === "APPROVED" ? `<button class="btn small yellow" onclick="archiveReport(${r.id})">ARSIPKAN</button>` : ""}
-      ${canDeleteReport(r) ? `<button class="btn small red" onclick="softDeleteReport(${r.id})">HAPUS</button>` : ""}
+      ${canDeleteReport(r) ? `<button class="btn small red" onclick="deleteReport(${r.id})">HAPUS</button>` : ""}
     </div>
   </div>`;
 }
@@ -1304,10 +1220,11 @@ async function submitReport(){
 
     const evidenceUrls = await uploadMany(files, "reports");
     const isPatrol = type === "PATROLI";
-    const isArrest = type === "KRIMINAL";
+    const isCriminal = type === "KRIMINAL";
 
     let payload = {
       report_date: document.querySelector("#rep_date")?.value || "",
+      chronology: document.querySelector("#rep_chronology")?.value || "",
       colleagues: getSelectedColleagues()
     };
 
@@ -1315,42 +1232,16 @@ async function submitReport(){
       payload = {
         ...payload,
         report_time: document.querySelector("#rep_time")?.value || "",
-        area: document.querySelector("#rep_area")?.value || "",
-        chronology: document.querySelector("#rep_chronology")?.value || ""
+        area: document.querySelector("#rep_area")?.value || ""
       };
 
       if(!payload.report_date) return alert("Tanggal patroli wajib diisi.");
       if(!payload.report_time) return alert("Jam patroli wajib diisi.");
       if(!payload.area.trim()) return alert("Area patroli wajib diisi.");
       if(!payload.chronology.trim()) return alert("Laporan singkat patroli wajib diisi.");
-    } else if(isArrest){
-      payload = {
-        ...payload,
-        report_time: document.querySelector("#rep_time")?.value || "",
-        arrest_datetime: `${document.querySelector("#rep_date")?.value || ""} ${document.querySelector("#rep_time")?.value || ""}`.trim(),
-        detention_location: document.querySelector("#rep_detention_location")?.value || "",
-        summary: document.querySelector("#rep_summary")?.value || "",
-        suspect_name: document.querySelector("#rep_suspect_name")?.value || "",
-        subject_info: document.querySelector("#rep_suspect_name")?.value || "",
-        law: document.querySelector("#rep_law")?.value || "",
-        fine: document.querySelector("#rep_fine")?.value || "",
-        sentence: document.querySelector("#rep_sentence")?.value || "",
-        duration: document.querySelector("#rep_sentence")?.value || "",
-        evidence_type: document.querySelector("#rep_evidence_type")?.value || "",
-        evidence_desc: document.querySelector("#rep_evidence_desc")?.value || ""
-      };
-
-      if(!payload.report_date) return alert("Tanggal penahanan wajib diisi.");
-      if(!payload.report_time) return alert("Waktu penahanan wajib diisi.");
-      if(!payload.detention_location.trim()) return alert("Lokasi penahanan wajib diisi.");
-      if(!payload.summary.trim()) return alert("Deskripsi singkat wajib diisi.");
-      if(!payload.suspect_name.trim()) return alert("Nama tersangka wajib diisi.");
-      if(!payload.law.trim()) return alert("Pasal wajib diisi.");
-      if(!payload.evidence_type.trim()) return alert("Jenis barang bukti wajib diisi.");
     } else {
       payload = {
         ...payload,
-        chronology: document.querySelector("#rep_chronology")?.value || "",
         subject_info: document.querySelector("#rep_subject_info")?.value || "",
         law: document.querySelector("#rep_law")?.value || "",
         duration: document.querySelector("#rep_duration")?.value || "",
@@ -1358,9 +1249,9 @@ async function submitReport(){
         plate: document.querySelector("#rep_plate")?.value || ""
       };
 
-      if(!payload.report_date) return alert("Tanggal penyitaan wajib diisi.");
+      if(!payload.report_date) return alert("Tanggal laporan wajib diisi.");
       if(!payload.chronology.trim()) return alert("Kronologi wajib diisi.");
-      if(!payload.subject_info.trim()) return alert("Informasi kendaraan wajib diisi.");
+      if(!payload.subject_info.trim()) return alert(isCriminal ? "Informasi tersangka wajib diisi." : "Informasi kendaraan wajib diisi.");
       if(!payload.law.trim()) return alert("Pasal wajib diisi.");
     }
 
@@ -1370,7 +1261,6 @@ async function submitReport(){
       nama: userDisplayName(p),
       divisi: p.divisi,
       rank_detail: p.rank_detail,
-      jabatan: p.jabatan,
       badge_number: p.badge_number || "",
       payload,
       evidence_url: evidenceUrls[0] || null,
@@ -1413,10 +1303,11 @@ async function saveReport(id){
   const oldUrls = getEvidenceList(r);
   const type = r.type;
   const isPatrol = type === "PATROLI";
-  const isArrest = type === "KRIMINAL";
+  const isCriminal = type === "KRIMINAL";
 
   let payload = {
     report_date: document.querySelector("#rep_date")?.value || "",
+    chronology: document.querySelector("#rep_chronology")?.value || "",
     colleagues: getSelectedColleagues()
   };
 
@@ -1424,29 +1315,11 @@ async function saveReport(id){
     payload = {
       ...payload,
       report_time: document.querySelector("#rep_time")?.value || "",
-      area: document.querySelector("#rep_area")?.value || "",
-      chronology: document.querySelector("#rep_chronology")?.value || ""
-    };
-  }else if(isArrest){
-    payload = {
-      ...payload,
-      report_time: document.querySelector("#rep_time")?.value || "",
-      arrest_datetime: `${document.querySelector("#rep_date")?.value || ""} ${document.querySelector("#rep_time")?.value || ""}`.trim(),
-      detention_location: document.querySelector("#rep_detention_location")?.value || "",
-      summary: document.querySelector("#rep_summary")?.value || "",
-      suspect_name: document.querySelector("#rep_suspect_name")?.value || "",
-      subject_info: document.querySelector("#rep_suspect_name")?.value || "",
-      law: document.querySelector("#rep_law")?.value || "",
-      fine: document.querySelector("#rep_fine")?.value || "",
-      sentence: document.querySelector("#rep_sentence")?.value || "",
-      duration: document.querySelector("#rep_sentence")?.value || "",
-      evidence_type: document.querySelector("#rep_evidence_type")?.value || "",
-      evidence_desc: document.querySelector("#rep_evidence_desc")?.value || ""
+      area: document.querySelector("#rep_area")?.value || ""
     };
   }else{
     payload = {
       ...payload,
-      chronology: document.querySelector("#rep_chronology")?.value || "",
       subject_info: document.querySelector("#rep_subject_info")?.value || "",
       law: document.querySelector("#rep_law")?.value || "",
       duration: document.querySelector("#rep_duration")?.value || "",
@@ -1456,15 +1329,10 @@ async function saveReport(id){
   }
 
   if(!payload.report_date) return alert("Tanggal laporan wajib diisi.");
+  if(!payload.chronology.trim()) return alert(isPatrol ? "Laporan singkat patroli wajib diisi." : "Kronologi wajib diisi.");
   if(isPatrol && !payload.area.trim()) return alert("Area patroli wajib diisi.");
-  if(isPatrol && !payload.chronology.trim()) return alert("Laporan singkat patroli wajib diisi.");
-  if(isArrest && !payload.detention_location.trim()) return alert("Lokasi penahanan wajib diisi.");
-  if(isArrest && !payload.summary.trim()) return alert("Deskripsi singkat wajib diisi.");
-  if(isArrest && !payload.suspect_name.trim()) return alert("Nama tersangka wajib diisi.");
-  if(isArrest && !payload.law.trim()) return alert("Pasal wajib diisi.");
-  if(isArrest && !payload.evidence_type.trim()) return alert("Jenis barang bukti wajib diisi.");
-  if(!isPatrol && !isArrest && !payload.subject_info.trim()) return alert("Informasi kendaraan wajib diisi.");
-  if(!isPatrol && !isArrest && !payload.law.trim()) return alert("Pasal wajib diisi.");
+  if(!isPatrol && !payload.subject_info.trim()) return alert(isCriminal ? "Informasi tersangka wajib diisi." : "Informasi kendaraan wajib diisi.");
+  if(!isPatrol && !payload.law.trim()) return alert("Pasal wajib diisi.");
 
   const finalEvidence = evidenceUrls.length ? evidenceUrls : oldUrls;
   if(!finalEvidence.length) return alert("Semua laporan operasi wajib punya minimal 1 foto bukti.");
@@ -1542,7 +1410,16 @@ async function rejectReport(id){
 }
 
 async function deleteReport(id){
-  return softDeleteReport(id);
+  if(!canDeleteReport()) return alert("Hanya PATI / SUPER ADMIN yang bisa hapus laporan.");
+  const r = S.reports.find(x => x.id === id);
+  if(!confirm("Yakin hapus laporan ini?")) return;
+  const { error } = await supabase.from("reports").delete().eq("id", id);
+  if(error) return alert(error.message);
+  await audit("DELETE_REPORT", "reports", id, r || {});
+  await botEvent("REPORT_DELETED", { id, report:r, deleted_by:S.profile.display_name });
+  await loadAll();
+  toast("Laporan dihapus.", "success");
+  render();
 }
 
 
@@ -1856,7 +1733,8 @@ async function rejectPayroll(id){
 }
 
 function logPage(){
-  const tabs = ["today","attendance","reports","propam","audit","leaderboard"];
+  const tabs = ["today","attendance","reports","propam", ...(high() ? ["audit"] : []), "leaderboard"];
+  if(S.tab === "audit" && !high()) S.tab = "today";
 
   return `<main class="app">
     ${top("ACTIVITY LOG")}
@@ -1867,7 +1745,7 @@ function logPage(){
         <div class="card green"><h3>ABSENSI</h3><h2>${S.attendance.length}</h2></div>
         <div class="card yellow"><h3>LAPORAN</h3><h2>${S.reports.length}</h2></div>
         <div class="card red"><h3>SP</h3><h2>${S.propam.length}</h2></div>
-        <div class="card blue"><h3>AUDIT</h3><h2>${S.audit.length}</h2></div>
+        ${high() ? `<div class="card blue"><h3>AUDIT</h3><h2>${S.audit.length}</h2></div>` : ""}
       </section>` : ""}
 
       ${S.tab === "attendance" ? logTable("Absensi", S.attendance, "attendance") : ""}
@@ -1922,6 +1800,13 @@ function logTable(title, rows, type){
 }
 
 function auditLog(){
+  if(!high()){
+    return `<section class="card red">
+      <h2>AKSES DITOLAK</h2>
+      <p>Audit Log hanya bisa dilihat oleh PATI dan SUPER ADMIN.</p>
+    </section>`;
+  }
+
   return `<section class="card">
     <h2>AUDIT LENGKAP</h2>
     ${S.audit.map(a => `<div class="list-item">
@@ -2041,111 +1926,6 @@ function promotionAdminPanel(){
   </section>`;
 }
 
-
-async function archiveReport(id){
-  if(!canManageReports()) return alert("Hanya PATI / SUPER ADMIN yang bisa arsipkan laporan.");
-  const r = S.reports.find(x => x.id === id);
-  if(!r) return alert("Laporan tidak ditemukan.");
-  const period = reportMonthKey(r);
-  const { error } = await supabase.from("reports").update({
-    status:"ARCHIVED",
-    archived_by:S.profile.display_name,
-    archived_at:new Date().toISOString(),
-    archive_period:period
-  }).eq("id", id);
-  if(error) return alert(error.message);
-  await audit("ARCHIVE_REPORT", "reports", id, { period, report:r });
-  await botEvent("REPORT_ARCHIVED", { id, type:r.type, nama:r.nama, period, archived_by:S.profile.display_name });
-  await loadAll();
-  toast("Laporan masuk arsip bulanan.", "success");
-  render();
-}
-
-async function archiveMonthlyReports(){
-  if(!canManageReports()) return alert("Hanya PATI / SUPER ADMIN yang bisa arsipkan laporan bulanan.");
-  const period = S.archiveMonth || monthKey();
-  if(!confirm(`Arsipkan semua laporan APPROVED bulan ${period}?`)) return;
-
-  const rows = S.reports.filter(r => reportVisibleInMain(r) && r.status === "APPROVED" && reportMonthKey(r) === period);
-  if(!rows.length) return alert("Tidak ada laporan APPROVED pada bulan ini.");
-
-  const ids = rows.map(r => r.id);
-  const { error } = await supabase.from("reports").update({
-    status:"ARCHIVED",
-    archived_by:S.profile.display_name,
-    archived_at:new Date().toISOString(),
-    archive_period:period
-  }).in("id", ids);
-
-  if(error) return alert(error.message);
-
-  await audit("ARCHIVE_MONTHLY_REPORTS", "reports", period, { ids, total:ids.length });
-  await botEvent("REPORT_MONTH_ARCHIVED", { period, total:ids.length, archived_by:S.profile.display_name });
-  await loadAll();
-  toast(`${ids.length} laporan bulan ${period} berhasil diarsipkan.`, "success");
-  render();
-}
-
-async function softDeleteReport(id){
-  if(!canManageReports()) return alert("Hanya PATI / SUPER ADMIN yang bisa hapus laporan.");
-  const r = S.reports.find(x => x.id === id);
-  if(!r) return alert("Laporan tidak ditemukan.");
-  if(!confirm("Yakin hapus laporan ini dari tampilan anggota? Data tetap tercatat di audit.")) return;
-
-  const { error } = await supabase.from("reports").update({
-    status:"DELETED",
-    deleted_by:S.profile.display_name,
-    deleted_at:new Date().toISOString()
-  }).eq("id", id);
-
-  if(error) return alert(error.message);
-
-  await audit("SOFT_DELETE_REPORT", "reports", id, r);
-  await botEvent("REPORT_DELETED", { id, report:r, deleted_by:S.profile.display_name });
-  await loadAll();
-  toast("Laporan dihapus dari tampilan anggota.", "success");
-  render();
-}
-
-async function deleteArchivedMonth(){
-  if(!canManageReports()) return alert("Hanya PATI / SUPER ADMIN yang bisa hapus arsip bulanan.");
-  const period = S.archiveMonth || monthKey();
-  if(!confirm(`Hapus semua arsip laporan bulan ${period} dari tampilan anggota?`)) return;
-
-  const rows = S.reports.filter(r => reportVisibleInArchive(r) && reportMonthKey(r) === period && String(r.status).toUpperCase() === "ARCHIVED");
-  if(!rows.length) return alert("Tidak ada arsip aktif pada bulan ini.");
-
-  const ids = rows.map(r => r.id);
-  const { error } = await supabase.from("reports").update({
-    status:"DELETED",
-    deleted_by:S.profile.display_name,
-    deleted_at:new Date().toISOString()
-  }).in("id", ids);
-
-  if(error) return alert(error.message);
-
-  await audit("DELETE_MONTHLY_ARCHIVE", "reports", period, { ids, total:ids.length });
-  await botEvent("REPORT_MONTH_DELETED", { period, total:ids.length, deleted_by:S.profile.display_name });
-  await loadAll();
-  toast(`${ids.length} arsip laporan bulan ${period} dihapus.`, "success");
-  render();
-}
-
-async function restoreReport(id){
-  if(!canManageReports()) return alert("Hanya PATI / SUPER ADMIN yang bisa restore laporan.");
-  const r = S.reports.find(x => x.id === id);
-  const { error } = await supabase.from("reports").update({
-    status:"ARCHIVED",
-    deleted_by:null,
-    deleted_at:null
-  }).eq("id", id);
-  if(error) return alert(error.message);
-  await audit("RESTORE_REPORT", "reports", id, r || {});
-  await loadAll();
-  toast("Laporan berhasil direstore ke arsip.", "success");
-  render();
-}
-
 function adminPage(){
   if(!high()) return blocked("PANEL PETINGGI ONLY");
 
@@ -2160,7 +1940,6 @@ function adminPage(){
           ["pending","PENDING USER"],
           ["attendance","ACC ABSENSI"],
           ["badge","BADGE GEN"],
-          ["archive","ARSIP"],
           ["settings","SETTING"]
         ].map(([id,label]) => `<button class="${S.tab===id ? "active" : ""}" onclick="setTab('${id}')">${label}</button>`).join("")}
       </section>
@@ -2170,7 +1949,6 @@ function adminPage(){
       ${S.tab === "members" ? adminMembers() : ""}
       ${S.tab === "attendance" ? attendanceAdminPanel() : ""}
       ${S.tab === "badge" ? badgeGeneratorPanel() : ""}
-      ${S.tab === "archive" ? reportArchivePanel() : ""}
       ${S.tab === "settings" ? `<section class="card yellow"><h2>SETTING DISCORD</h2><p>Channel Discord diset lewat bot /setup.</p></section>` : ""}
     </main>${nav()}
   </main>`;
@@ -2461,12 +2239,6 @@ Object.assign(window, {
   submitReport,
   exportReportPDF,
   deleteReport,
-  restoreReport,
-  softDeleteReport,
-  deleteArchivedMonth,
-  archiveMonthlyReports,
-  archiveReport,
-  setArchiveMonth,
   rejectPromotionRequest,
   approvePromotionRequest,
   submitPromotionRequest,
@@ -2497,10 +2269,3 @@ init().catch(err => {
   console.error(err);
   app.innerHTML = `<main class="app page"><section class="card red"><h2>ERROR</h2><p>${e(err.message)}</p></section></main>`;
 });
-
-window.setArchiveMonth = setArchiveMonth;
-window.archiveReport = archiveReport;
-window.archiveMonthlyReports = archiveMonthlyReports;
-window.deleteArchivedMonth = deleteArchivedMonth;
-window.softDeleteReport = softDeleteReport;
-window.restoreReport = restoreReport;
