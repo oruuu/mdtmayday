@@ -353,6 +353,8 @@ let lastPersonnelRefreshAt = 0;
 const POINTS_PER_HOUR = 10;
 const PAYROLL_PER_POINT = 1000;
 const MIN_DUTY_MINUTES = 30;
+const PAGE_LOADING_MS = 3000;
+const ACTION_LOADING_MS = 3000;
 
 function money(v){
   return new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", maximumFractionDigits:0 }).format(Number(v || 0));
@@ -473,9 +475,26 @@ function skeletonPage(title = "MEMUAT"){
   return `<main class="app">${top(title)}<main class="page">
       ${promotionAdminPanel()}<section class="card skeleton-card"><div class="skeleton sk-title"></div><div class="skeleton sk-line"></div><div class="skeleton sk-line short"></div></section><section class="grid">${Array.from({length:6}).map(()=>`<div class="tile skeleton-tile"><div class="skeleton sk-icon"></div><div class="skeleton sk-line"></div></div>`).join("")}</section></main></main>`;
 }
+
+async function withMinimumLoading(text, fn, ms = ACTION_LOADING_MS){
+  const started = Date.now();
+  S.loading = true;
+  S.loadingText = text || "Memproses data...";
+  render();
+
+  try{
+    await sleep(120);
+    return await fn();
+  }finally{
+    const left = ms - (Date.now() - started);
+    if(left > 0) await sleep(left);
+    S.loading = false;
+    render();
+  }
+}
+
 async function withLoading(text, fn){
-  try{ S.loading = true; S.loadingText = text || "Memproses..."; render(); await sleep(140); return await fn(); }
-  finally{ S.loading = false; }
+  return withMinimumLoading(text || "Memproses...", fn, ACTION_LOADING_MS);
 }
 function sidebar(){
   if(!S.profile || S.profile.status !== "ACTIVE") return "";
@@ -684,6 +703,7 @@ function go(page){
   S.loading = true;
   S.loadingText = `Membuka ${pageTitle(page)}...`;
   render();
+
   setTimeout(() => {
     S.page = page;
     if(page === "attendance") S.tab = canApproveAttendance() ? "pending" : "form";
@@ -692,7 +712,7 @@ function go(page){
     else S.tab = "today";
     S.loading = false;
     render();
-  }, 180);
+  }, PAGE_LOADING_MS);
 }
 
 function setTab(tab){
@@ -918,7 +938,7 @@ function setupRealtimeWeb(){
   supabase.channel("web-payroll-live").on("postgres_changes", { event:"*", schema:"public", table:"payrolls" }, () => reloadAndToast("Payroll diperbarui")).subscribe();
   supabase.channel("web-promotion-live").on("postgres_changes", { event:"*", schema:"public", table:"promotion_requests" }, () => reloadAndToast("Pengajuan kenaikan pangkat diperbarui")).subscribe();
 }
-async function syncDiscord(){
+async function __syncDiscord(){
   if(!S.profile?.discord_id) return toast("Discord ID belum tersedia.", "error");
   await withLoading("Sinkronisasi Discord...", async () => {
     await botEvent("SYNC_DISCORD_PROFILE", { profile_id:S.profile.id, discord_id:S.profile.discord_id, requested_by:userDisplayName() });
@@ -926,6 +946,10 @@ async function syncDiscord(){
   });
   S.loading = false; render();
 }
+async function syncDiscord(){
+  return withMinimumLoading("Sinkronisasi Discord...", () => __syncDiscord(), ACTION_LOADING_MS);
+}
+
 
 function attendancePage(){
   const tabs = canApproveAttendance()
@@ -1058,7 +1082,7 @@ function renderEvidenceLinks(r){
   return `<div class="evidence-links">${urls.map((u,i)=>`<a href="${e(u)}" target="_blank">Bukti ${i+1}</a>`).join(" ")}</div>`;
 }
 
-async function submitAttendance(){
+async function __submitAttendance(){
   try{
     const p = S.profile;
     const type = document.querySelector("#abs_type").value;
@@ -1119,6 +1143,10 @@ async function submitAttendance(){
     go("log"); S.tab = "attendance"; render();
   }catch(err){ alert(err.message); }
 }
+async function submitAttendance(){
+  return withMinimumLoading("Mengirim absensi...", () => __submitAttendance(), ACTION_LOADING_MS);
+}
+
 
 async function approveAttendance(id){
   if(!canApproveAttendance()) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa ACC absensi.");
@@ -1328,7 +1356,7 @@ function setReportCat(c){
   render();
 }
 
-async function submitReport(){
+async function __submitReport(){
   try{
     const p = S.profile;
     const type = document.querySelector("#rep_type")?.value || S.currentReport || "PATROLI";
@@ -1426,6 +1454,10 @@ async function submitReport(){
     alert(err.message);
   }
 }
+async function submitReport(){
+  return withMinimumLoading("Mengirim laporan operasi...", () => __submitReport(), ACTION_LOADING_MS);
+}
+
 
 
 function editReport(id){
@@ -1439,7 +1471,7 @@ function editReport(id){
   document.body.appendChild(modal);
 }
 
-async function saveReport(id){
+async function __saveReport(id){
   const r = S.reports.find(x => x.id === id);
   if(!r) return alert("Laporan tidak ditemukan.");
   if(!canEditReport(r)) return alert("Akses edit ditolak.");
@@ -1520,8 +1552,12 @@ async function saveReport(id){
   toast("Laporan berhasil diedit.", "success");
   render();
 }
+async function saveReport(id){
+  return withMinimumLoading("Menyimpan laporan...", () => __saveReport(id), ACTION_LOADING_MS);
+}
 
-async function approveReport(id){
+
+async function __approveReport(id){
   if(!canManageReports()) return alert("Hanya PATI / SUPER ADMIN yang bisa ACC laporan.");
   const r = S.reports.find(x => x.id === id);
   if(!r) return alert("Laporan tidak ditemukan.");
@@ -1549,8 +1585,12 @@ async function approveReport(id){
   toast("Laporan di-ACC. Activity point diberikan ke petugas dan rekan.", "success");
   render();
 }
+async function approveReport(id){
+  return withMinimumLoading("Memproses ACC laporan...", () => __approveReport(id), ACTION_LOADING_MS);
+}
 
-async function rejectReport(id){
+
+async function __rejectReport(id){
   if(!canManageReports()) return alert("Hanya PATI / SUPER ADMIN yang bisa reject laporan.");
   const r = S.reports.find(x => x.id === id);
   const reason = prompt("Alasan reject laporan") || "Ditolak";
@@ -1576,6 +1616,10 @@ async function rejectReport(id){
   toast("Laporan ditolak. Pengisi masih bisa edit ulang.", "info");
   render();
 }
+async function rejectReport(id){
+  return withMinimumLoading("Memproses reject laporan...", () => __rejectReport(id), ACTION_LOADING_MS);
+}
+
 
 async function deleteReport(id){
   return softDeleteReport(id);
@@ -1851,7 +1895,7 @@ function payrollPage(){
   </main>${nav()}</main>`;
 }
 
-async function submitPayroll(){
+async function __submitPayroll(){
   const points = Number(S.profile.duty_points || 0);
   const minutes = Number(S.profile.duty_minutes || 0);
   const amount = Number(S.profile.pending_payroll || 0);
@@ -1865,8 +1909,12 @@ async function submitPayroll(){
   await audit("CREATE_PAYROLL", "payrolls", "", { points, minutes, amount });
   await loadAll(); toast("Pengajuan payroll terkirim.", "success"); render();
 }
+async function submitPayroll(){
+  return withMinimumLoading("Mengirim pengajuan gaji...", () => __submitPayroll(), ACTION_LOADING_MS);
+}
 
-async function approvePayroll(id){
+
+async function __approvePayroll(id){
   const row = S.payrolls.find(x => x.id === id);
   if(!row) return alert("Data payroll tidak ditemukan.");
   const amount = Number(row.requested_amount || row.amount || 0);
@@ -1882,14 +1930,22 @@ async function approvePayroll(id){
   await botEvent("PAYROLL_PAID", { id, nama: row.nama, requested_points: row.requested_points, requested_amount: amount, approved_by: S.profile.display_name });
   await loadAll(); toast("Payroll dibayar dan point duty anggota direset.", "success"); render();
 }
+async function approvePayroll(id){
+  return withMinimumLoading("Memproses payroll...", () => __approvePayroll(id), ACTION_LOADING_MS);
+}
 
-async function rejectPayroll(id){
+
+async function __rejectPayroll(id){
   const row = S.payrolls.find(x => x.id === id);
   await supabase.from("payrolls").update({ status:"REJECTED", approved_by:S.profile.display_name }).eq("id", id);
   await audit("REJECT_PAYROLL", "payrolls", id, { row });
   await botEvent("PAYROLL_REJECTED", { id, nama: row?.nama, requested_points: row?.requested_points, requested_amount: row?.requested_amount || row?.amount, rejected_by: S.profile.display_name });
   await loadAll(); toast("Payroll ditolak. Point duty tidak direset.", "info"); render();
 }
+async function rejectPayroll(id){
+  return withMinimumLoading("Menolak payroll...", () => __rejectPayroll(id), ACTION_LOADING_MS);
+}
+
 
 function logPage(){
   const tabs = ["today","attendance","reports","propam", ...(high() ? ["audit"] : []), "leaderboard"];
@@ -1977,7 +2033,7 @@ function auditLog(){
 }
 
 
-async function submitPromotionRequest(){
+async function __submitPromotionRequest(){
   const p = S.profile;
   const pr = rankProgress(p);
   if(!pr.eligible) return alert("Activity point belum memenuhi syarat kenaikan pangkat.");
@@ -2007,8 +2063,12 @@ async function submitPromotionRequest(){
   toast("Pengajuan kenaikan pangkat dikirim.", "success");
   render();
 }
+async function submitPromotionRequest(){
+  return withMinimumLoading("Mengirim pengajuan kenaikan pangkat...", () => __submitPromotionRequest(), ACTION_LOADING_MS);
+}
 
-async function approvePromotionRequest(id){
+
+async function __approvePromotionRequest(id){
   if(!can(["PATI","SUPER ADMIN"])) return alert("Hanya PATI / SUPER ADMIN yang bisa ACC kenaikan pangkat.");
   const req = S.promotionRequests.find(x => x.id === id);
   if(!req) return alert("Pengajuan tidak ditemukan.");
@@ -2046,8 +2106,12 @@ async function approvePromotionRequest(id){
   toast("Kenaikan pangkat di-ACC. Activity point direset ke 0.", "success");
   render();
 }
+async function approvePromotionRequest(id){
+  return withMinimumLoading("Memproses kenaikan pangkat...", () => __approvePromotionRequest(id), ACTION_LOADING_MS);
+}
 
-async function rejectPromotionRequest(id){
+
+async function __rejectPromotionRequest(id){
   if(!can(["PATI","SUPER ADMIN"])) return alert("Hanya PATI / SUPER ADMIN yang bisa reject kenaikan pangkat.");
   const req = S.promotionRequests.find(x => x.id === id);
   const reason = prompt("Alasan reject kenaikan pangkat") || "Ditolak";
@@ -2064,6 +2128,10 @@ async function rejectPromotionRequest(id){
   toast("Pengajuan kenaikan pangkat ditolak. Activity point tetap tersimpan.", "info");
   render();
 }
+async function rejectPromotionRequest(id){
+  return withMinimumLoading("Menolak kenaikan pangkat...", () => __rejectPromotionRequest(id), ACTION_LOADING_MS);
+}
+
 
 function promotionAdminPanel(){
   if(!can(["PATI","SUPER ADMIN"])) return "";
@@ -2105,7 +2173,7 @@ async function archiveReport(id){
   render();
 }
 
-async function archiveMonthlyReports(){
+async function __archiveMonthlyReports(){
   if(!high()) return alert("Hanya PATI / SUPER ADMIN yang bisa arsipkan laporan bulanan.");
   const period = S.archiveMonth || monthKey();
   if(!confirm(`Arsipkan semua laporan APPROVED bulan ${monthNameID(period)}?`)) return;
@@ -2129,8 +2197,12 @@ async function archiveMonthlyReports(){
   toast(`${ids.length} laporan ${monthNameID(period)} berhasil diarsipkan.`, "success");
   render();
 }
+async function archiveMonthlyReports(){
+  return withMinimumLoading("Mengarsipkan laporan bulanan...", () => __archiveMonthlyReports(), ACTION_LOADING_MS);
+}
 
-async function softDeleteReport(id){
+
+async function __softDeleteReport(id){
   if(!high()) return alert("Hanya PATI / SUPER ADMIN yang bisa hapus laporan.");
   const r = S.reports.find(x => x.id === id);
   if(!r) return alert("Laporan tidak ditemukan.");
@@ -2150,8 +2222,12 @@ async function softDeleteReport(id){
   toast("Laporan dihapus dari arsip.", "success");
   render();
 }
+async function softDeleteReport(id){
+  return withMinimumLoading("Menghapus laporan dari arsip...", () => __softDeleteReport(id), ACTION_LOADING_MS);
+}
 
-async function deleteArchivedMonth(){
+
+async function __deleteArchivedMonth(){
   if(!high()) return alert("Hanya PATI / SUPER ADMIN yang bisa hapus arsip bulanan.");
   const period = S.archiveMonth || monthKey();
   if(!confirm(`Hapus semua arsip laporan bulan ${monthNameID(period)}?`)) return;
@@ -2174,8 +2250,12 @@ async function deleteArchivedMonth(){
   toast(`${ids.length} arsip ${monthNameID(period)} dihapus.`, "success");
   render();
 }
+async function deleteArchivedMonth(){
+  return withMinimumLoading("Menghapus arsip bulanan...", () => __deleteArchivedMonth(), ACTION_LOADING_MS);
+}
 
-async function restoreReport(id){
+
+async function __restoreReport(id){
   if(!high()) return alert("Hanya PATI / SUPER ADMIN yang bisa restore laporan.");
   const r = S.reports.find(x => x.id === id);
   const { error } = await supabase.from("reports").update({
@@ -2189,6 +2269,10 @@ async function restoreReport(id){
   toast("Laporan berhasil direstore ke arsip.", "success");
   render();
 }
+async function restoreReport(id){
+  return withMinimumLoading("Restore arsip laporan...", () => __restoreReport(id), ACTION_LOADING_MS);
+}
+
 
 function adminPage(){
   if(!high()) return blocked("PANEL PETINGGI ONLY");
@@ -2376,7 +2460,7 @@ async function updateMemberWithHistory(id, data, action="UPDATE_MEMBER"){
   await audit(action, "profiles", id, { old, data });
 }
 
-async function saveMember(id){
+async function __saveMember(id){
   const data = {
     display_name: document.querySelector("#edit_name").value,
     badge_number: document.querySelector("#edit_badge").value,
@@ -2395,6 +2479,10 @@ async function saveMember(id){
     alert(err.message);
   }
 }
+async function saveMember(id){
+  return withMinimumLoading("Menyimpan data anggota...", () => __saveMember(id), ACTION_LOADING_MS);
+}
+
 
 async function approveUser(id){
   if(!can(["PATI","SUPER ADMIN"])) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa ACC user.");
@@ -2419,7 +2507,7 @@ async function rejectUser(id){
 }
 
 
-async function deleteMember(id){
+async function __deleteMember(id){
   if(!canDeleteMember()) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa menghapus anggota.");
 
   const target = S.members.find(x => x.id === id);
@@ -2465,6 +2553,10 @@ async function deleteMember(id){
     alert("Gagal hapus anggota: " + err.message);
   }
 }
+async function deleteMember(id){
+  return withMinimumLoading("Menghapus anggota...", () => __deleteMember(id), ACTION_LOADING_MS);
+}
+
 
 
 function blocked(msg){
