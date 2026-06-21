@@ -636,7 +636,8 @@ async function botEvent(event_type, payload = {}){
     toast(`Bot event gagal: ${err.message}`, "error");
     return null;
   }
-}){
+}
+{
   try{
     await supabase.from("bot_events").insert({
       event_type,
