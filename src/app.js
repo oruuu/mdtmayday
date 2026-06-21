@@ -26,7 +26,7 @@ const S = {
   theme: localStorage.getItem("mayday_theme") || "light"
 };
 
-const DIV = ["NON DEVISI","SABHARA","SATBRIMOB","SATLANTAS","POLAIRUD","BARESKRIM","SETUM","BIDPROPAM"];
+const DIV = ["NON DIVISI","SABHARA","SATBRIMOB","SATLANTAS","POLAIRUD","BARESKRIM","SETUM","BIDPROPAM"];
 const JAB = ["CASIS","TAMTAMA","BINTARA","PAMA","PAMEN","PATI","SUPER ADMIN"];
 const RANK = [
   "CASIS",
@@ -47,7 +47,7 @@ const REPORT_TYPES = [
 
 const ACTIVITY_CAP_BY_RANK = {
   "CASIS": 20,
-  "Tamtama": 65,
+  "TAMTAMA": 65,
   "Bripda": 75,
   "Briptu": 85,
   "Brigpol": 95,
@@ -74,12 +74,25 @@ const REPORT_ACTIVITY_POINTS = {
   "KRIMINAL": 3
 };
 
+function normalizeRank(rank){
+  const r = String(rank || "").trim();
+  if(["Bharada","Bharatu","Bharaka","BHARADA","BHARATU","BHARAKA","Tamtama"].includes(r)) return "TAMTAMA";
+  return r;
+}
+
+function normalizeDivisi(divisi){
+  const d = String(divisi || "").trim();
+  if(d.toUpperCase() === "CASIS" || d.toUpperCase() === "NON DEVISI") return "NON DIVISI";
+  return d || "NON DIVISI";
+}
+
 function reportPointValue(type){
   return REPORT_ACTIVITY_POINTS[type] || 1;
 }
 
 function rankIndex(rank){
-  return RANK.findIndex(x => String(x).toLowerCase() === String(rank || "").toLowerCase());
+  const r = normalizeRank(rank);
+  return RANK.findIndex(x => String(x).toLowerCase() === String(r || "").toLowerCase());
 }
 
 function nextRank(rank){
@@ -90,11 +103,12 @@ function nextRank(rank){
 }
 
 function isUnlimitedRank(rank){
-  return ["PATI","SUPER ADMIN","Brigjen","Irjen","Komjen","Jenderal Polisi","Super Admin"].includes(rank);
+  const r = normalizeRank(rank);
+  return ["PATI","SUPER ADMIN","Brigjen","Irjen","Komjen","Jenderal Polisi","Super Admin"].includes(r);
 }
 
 function rankProgress(member = S.profile){
-  const rank = member?.rank_detail || member?.jabatan || "CASIS";
+  const rank = normalizeRank(member?.rank_detail || member?.jabatan || "CASIS");
   const point = Number(member?.activity_points_month || 0);
   const cap = activityCapFor(member);
   const unlimited = isUnlimitedRank(rank) || cap >= 999999;
@@ -240,7 +254,8 @@ function reportTypeLabel(type){
 }
 
 function activityCapFor(member){
-  return ACTIVITY_CAP_BY_RANK[member?.rank_detail] ?? ACTIVITY_CAP_BY_RANK[member?.jabatan] ?? 10;
+  const rank = normalizeRank(member?.rank_detail || member?.jabatan);
+  return ACTIVITY_CAP_BY_RANK[rank] ?? 10;
 }
 
 function reportColleagueOptions(selected = []){
@@ -435,7 +450,7 @@ function pageTitle(page = S.page){
 }
 
 function userDisplayName(p = S.profile){
-  return p?.discord_nickname || p?.server_nickname || p?.display_name || p?.discord_username || "Unknown";
+  return p?.server_nickname || p?.discord_nickname || p?.display_name || p?.discord_username || "Unknown";
 }
 
 function setTheme(theme){
@@ -577,7 +592,11 @@ async function loadAll(){
     supabase.from("promotion_requests").select("*").order("created_at", { ascending:false }).limit(300)
   ]);
 
-  S.members = m.data || [];
+  S.members = (m.data || []).map(x => ({
+    ...x,
+    rank_detail: normalizeRank(x.rank_detail),
+    divisi: normalizeDivisi(x.divisi)
+  }));
   if(S.profile?.id){ const freshProfile = S.members.find(x => x.id === S.profile.id); if(freshProfile) S.profile = { ...S.profile, ...freshProfile }; }
   S.attendance = a.data || [];
   S.reports = r.data || [];
@@ -603,6 +622,21 @@ async function audit(action, target_type, target_id, metadata = {}){
 }
 
 async function botEvent(event_type, payload = {}){
+  try{
+    const { data, error } = await supabase.from("bot_events").insert({
+      event_type,
+      payload,
+      status: "PENDING"
+    }).select("*").single();
+
+    if(error) throw error;
+    return data;
+  }catch(err){
+    console.warn("bot event failed:", err.message);
+    toast(`Bot event gagal: ${err.message}`, "error");
+    return null;
+  }
+}){
   try{
     await supabase.from("bot_events").insert({
       event_type,
@@ -940,11 +974,44 @@ function setupRealtimeWeb(){
 }
 async function syncDiscord(){
   if(!S.profile?.discord_id) return toast("Discord ID belum tersedia.", "error");
+
   await withLoading("Sinkronisasi Discord...", async () => {
-    await botEvent("SYNC_DISCORD_PROFILE", { profile_id:S.profile.id, discord_id:S.profile.discord_id, requested_by:userDisplayName() });
-    toast("Request sync Discord dikirim ke bot.", "success");
+    const ev = await botEvent("SYNC_DISCORD_PROFILE", {
+      profile_id: S.profile.id,
+      discord_id: S.profile.discord_id,
+      requested_by: userDisplayName()
+    });
+
+    if(!ev?.id) throw new Error("Gagal membuat request sync Discord.");
+
+    toast("Request sync Discord dikirim. Menunggu bot...", "info");
+
+    let done = false;
+    let lastError = "";
+
+    for(let i = 0; i < 15; i++){
+      await sleep(1000);
+      const { data, error } = await supabase
+        .from("bot_events")
+        .select("status,error_message")
+        .eq("id", ev.id)
+        .maybeSingle();
+
+      if(error){ lastError = error.message; continue; }
+      if(data?.status === "DONE"){ done = true; break; }
+      if(data?.status === "ERROR") throw new Error(data.error_message || "Sync Discord gagal di bot.");
+    }
+
+    await loadAll();
+    const freshProfile = S.members.find(x => Number(x.id) === Number(S.profile.id));
+    if(freshProfile) S.profile = { ...S.profile, ...freshProfile };
+
+    toast(done ? "Sync Discord selesai. Profil langsung diperbarui." : (lastError ? `Sync belum selesai: ${lastError}` : "Sync dikirim, data sudah direfresh."), done ? "success" : "info");
+    render();
   });
-  S.loading = false; render();
+
+  S.loading = false;
+  render();
 }
 
 function attendancePage(){
