@@ -898,9 +898,39 @@ function setupRealtimeWeb(){
   };
 
   supabase
-    .channel("web-profiles-live")
-    .on("postgres_changes", { event:"*", schema:"public", table:"profiles" }, reloadPersonnelSlow)
-    .subscribe();
+  .channel("web-profiles-live")
+  .on(
+    "postgres_changes",
+    { event:"*", schema:"public", table:"profiles" },
+    async payload => {
+
+      const changed = payload.new || payload.old || {};
+
+      if(
+        S.profile?.id &&
+        Number(changed.id) === Number(S.profile.id)
+      ){
+        await loadAll();
+
+        const freshProfile = S.members.find(
+          x => Number(x.id) === Number(S.profile.id)
+        );
+
+        if(freshProfile){
+          S.profile = {
+            ...S.profile,
+            ...freshProfile
+          };
+        }
+
+        render();
+        return;
+      }
+
+      await reloadPersonnelSlow();
+    }
+  )
+  .subscribe();
 
   supabase.channel("web-attendance-live").on("postgres_changes", { event:"*", schema:"public", table:"attendance" }, () => reloadAndToast("Data absensi diperbarui")).subscribe();
   supabase.channel("web-reports-live").on("postgres_changes", { event:"*", schema:"public", table:"reports" }, () => reloadAndToast("Laporan baru masuk")).subscribe();
