@@ -26,11 +26,11 @@ const S = {
   theme: localStorage.getItem("mayday_theme") || "light"
 };
 
-const DIV = ["CASIS","SABHARA","SATBRIMOB","SATLANTAS","POLAIRUD","BARESKRIM","SETUM","BIDPROPAM"];
+const DIV = ["NON DEVISI","SABHARA","SATBRIMOB","SATLANTAS","POLAIRUD","BARESKRIM","SETUM","BIDPROPAM"];
 const JAB = ["CASIS","TAMTAMA","BINTARA","PAMA","PAMEN","PATI","SUPER ADMIN"];
 const RANK = [
   "CASIS",
-  "Bharada","Bharatu","Bharaka",
+  "TAMTAMA",
   "Bripda","Briptu","Brigpol","Bripka","Aipda","Aiptu",
   "Ipda","Iptu","AKP",
   "Kompol","AKBP","Kombes",
@@ -47,9 +47,7 @@ const REPORT_TYPES = [
 
 const ACTIVITY_CAP_BY_RANK = {
   "CASIS": 20,
-  "Bharada": 30,
-  "Bharatu": 50,
-  "Bharaka": 65,
+  "Tamtama": 65,
   "Bripda": 75,
   "Briptu": 85,
   "Brigpol": 95,
@@ -536,7 +534,7 @@ async function ensureProfile(){
       badge_number: "",
       jabatan: "CASIS",
       rank_detail: "CASIS",
-      divisi: "CASIS",
+      divisi: "NON DIVISI",
       status: "PENDING",
       last_login: new Date().toISOString(),
       last_seen: new Date().toISOString()
