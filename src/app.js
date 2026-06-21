@@ -2465,23 +2465,70 @@ async function updateMemberWithHistory(id, data, action="UPDATE_MEMBER"){
 }
 
 async function saveMember(id){
-  const data = {
-    display_name: document.querySelector("#edit_name").value,
-    badge_number: document.querySelector("#edit_badge").value,
-    jabatan: document.querySelector("#edit_jabatan").value,
-    rank_detail: document.querySelector("#edit_rank").value,
-    divisi: document.querySelector("#edit_divisi").value,
-    status: document.querySelector("#edit_status").value
-  };
+  const old = S.members.find(x => Number(x.id) === Number(id));
 
-  try{
-    await updateMemberWithHistory(id, data, "UPDATE_MEMBER");
-    closeModal();
+  const display_name = document.querySelector("#edit_name")?.value?.trim() || "";
+  const badge_number = document.querySelector("#edit_badge")?.value?.trim() || "";
+  const jabatan = document.querySelector("#edit_jabatan")?.value || "";
+  const rank_detail = document.querySelector("#edit_rank")?.value || "";
+  const divisi = document.querySelector("#edit_divisi")?.value || "";
+  const status = document.querySelector("#edit_status")?.value || "";
+
+  if(!display_name) return toast("Nama tidak boleh kosong.", "error");
+
+  await withLoading("Menyimpan data anggota...", async () => {
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        display_name,
+        discord_nickname: display_name,
+        server_nickname: display_name,
+        badge_number,
+        jabatan,
+        rank_detail,
+        divisi,
+        status
+      })
+      .eq("id", id);
+
+    if(error) throw error;
+
+    await audit("UPDATE_MEMBER", "profiles", id, {
+      old,
+      new: {
+        display_name,
+        discord_nickname: display_name,
+        server_nickname: display_name,
+        badge_number,
+        jabatan,
+        rank_detail,
+        divisi,
+        status
+      }
+    });
+
+    await botEvent("MEMBER_UPDATED", {
+      id,
+      nama: display_name,
+      badge_number,
+      jabatan,
+      rank_detail,
+      divisi,
+      status,
+      requested_by: userDisplayName()
+    });
+
     await loadAll();
+
+    const freshProfile = S.members.find(x => Number(x.id) === Number(S.profile?.id));
+    if(freshProfile){
+      S.profile = { ...S.profile, ...freshProfile };
+    }
+
+    closeModal();
+    toast("Data anggota berhasil diperbarui.", "success");
     render();
-  }catch(err){
-    alert(err.message);
-  }
+  });
 }
 
 async function approveUser(id){
