@@ -1,4 +1,4 @@
--- MAYDAY MDT V2.2 FULL FEATURE PATCH
+-- MAYDAY MDT V3.4 FULL FEATURE PATCH
 
 alter table profiles
 add column if not exists rank_detail text not null default 'CASIS';

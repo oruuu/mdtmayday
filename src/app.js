@@ -9,8 +9,8 @@ const S = {
   tab: "today",
   search: "",
   searchDraft: "",
-  memberDivisionFilter: "ALL",
-  memberRankFilter: "ALL",
+  memberDivisionFilter: "",
+  memberRankFilter: "",
   formDirty: false,
   members: [],
   attendance: [],
@@ -699,7 +699,6 @@ function nav(){
 }
 
 function go(page){
-  S.formDirty = false;
   S.loading = true;
   S.loadingText = `Membuka ${pageTitle(page)}...`;
   render();
@@ -732,31 +731,31 @@ function shouldBlockAutoReload(){
   return S.loading || S.formDirty || !!document.querySelector(".modal-backdrop, .modal, .dialog, [data-modal='true']");
 }
 
-function applyMemberSearch(){
-  const el = document.querySelector("#member_search");
-  S.search = (el?.value || S.searchDraft || "").trim();
-  render();
-}
-
 function setMemberSearchDraft(v){
   S.searchDraft = v || "";
 }
 
+function applyMemberSearch(){
+  const el = document.querySelector("#member_search");
+  S.search = String(el?.value || S.searchDraft || "").trim();
+  render();
+}
+
 function setMemberDivisionFilter(v){
-  S.memberDivisionFilter = v || "ALL";
+  S.memberDivisionFilter = v || "";
   render();
 }
 
 function setMemberRankFilter(v){
-  S.memberRankFilter = v || "ALL";
+  S.memberRankFilter = v || "";
   render();
 }
 
 function clearMemberFilters(){
   S.search = "";
   S.searchDraft = "";
-  S.memberDivisionFilter = "ALL";
-  S.memberRankFilter = "ALL";
+  S.memberDivisionFilter = "";
+  S.memberRankFilter = "";
   render();
 }
 
@@ -764,13 +763,37 @@ function setSearch(v){
   S.searchDraft = v || "";
 }
 
+
+function memberSearchFilterPanel(){
+  return `${memberSearchFilterPanel()}
+
+    <div class="field">
+      <label>Filter Rank</label>
+      <select onchange="setMemberRankFilter(this.value)">
+        <option value="" ${!S.memberRankFilter ? "selected" : ""}>SEMUA RANK</option>
+        ${RANK.map(x => `<option value="${e(x)}" ${S.memberRankFilter===x ? "selected" : ""}>${e(x)}</option>`).join("")}
+      </select>
+    </div>
+  </div>
+
+  ${(S.search || S.memberDivisionFilter || S.memberRankFilter) ? `<div class="filter-summary">
+    Filter aktif:
+    ${S.search ? `<b>Pencarian: ${e(S.search)}</b>` : ""}
+    ${S.memberDivisionFilter ? `<b>Divisi: ${e(S.memberDivisionFilter)}</b>` : ""}
+    ${S.memberRankFilter ? `<b>Rank: ${e(S.memberRankFilter)}</b>` : ""}
+  </div>` : ""}`;
+}
+
 function filteredMembers(){
   const q = String(S.search || "").trim().toLowerCase();
-  const div = S.memberDivisionFilter || "ALL";
-  const rank = S.memberRankFilter || "ALL";
+  const div = String(S.memberDivisionFilter || "").trim();
+  const rank = String(S.memberRankFilter || "").trim();
 
   return S.members.filter(m => {
+    const memberName = userDisplayName(m);
+
     const matchText = !q || [
+      memberName,
       m.display_name,
       m.server_nickname,
       m.discord_nickname,
@@ -783,8 +806,10 @@ function filteredMembers(){
       m.discord_id
     ].some(x => String(x || "").toLowerCase().includes(q));
 
-    const matchDiv = div === "ALL" || String(m.divisi || "") === div;
-    const matchRank = rank === "ALL" || String(m.rank_detail || m.jabatan || "") === rank || String(m.jabatan || "") === rank;
+    const matchDiv = !div || String(m.divisi || "") === div;
+    const matchRank = !rank ||
+      String(m.rank_detail || "") === rank ||
+      String(m.jabatan || "") === rank;
 
     return matchText && matchDiv && matchRank;
   });
@@ -998,8 +1023,18 @@ function setupRealtimeWeb(){
           if(shouldBlockAutoReload()) return;
 
           await loadAll();
-          const freshProfile = S.members.find(x => Number(x.id) === Number(S.profile.id));
-          if(freshProfile) S.profile = { ...S.profile, ...freshProfile };
+
+          const freshProfile = S.members.find(
+            x => Number(x.id) === Number(S.profile.id)
+          );
+
+          if(freshProfile){
+            S.profile = {
+              ...S.profile,
+              ...freshProfile
+            };
+          }
+
           render();
           return;
         }
@@ -2543,17 +2578,35 @@ async function saveMember(id){
 
     if(error) throw error;
 
-    S.members = S.members.map(m => Number(m.id) === Number(id) ? { ...m, ...data } : m);
-    if(Number(S.profile?.id) === Number(id)) S.profile = { ...S.profile, ...data };
+    S.members = S.members.map(m =>
+      Number(m.id) === Number(id) ? { ...m, ...data } : m
+    );
 
-    S.formDirty = false;
+    if(Number(S.profile?.id) === Number(id)){
+      S.profile = { ...S.profile, ...data };
+    }
+
     closeModal();
     toast("Data anggota berhasil diperbarui.", "success");
     S.loading = false;
     render();
 
-    audit("UPDATE_MEMBER", "profiles", id, { old, new: updateData }).catch(err => console.warn("audit failed:", err.message));
-    botEvent("MEMBER_UPDATED", { id, nama: display_name, badge_number, jabatan, rank_detail, divisi, status, requested_by: userDisplayName() }).catch(err => console.warn("botEvent failed:", err.message));
+    audit("UPDATE_MEMBER", "profiles", id, {
+      old,
+      new: updateData
+    }).catch(err => console.warn("audit failed:", err.message));
+
+    botEvent("MEMBER_UPDATED", {
+      id,
+      nama: display_name,
+      badge_number,
+      jabatan,
+      rank_detail,
+      divisi,
+      status,
+      requested_by: userDisplayName()
+    }).catch(err => console.warn("botEvent failed:", err.message));
+
   }catch(err){
     S.loading = false;
     render();
@@ -2713,12 +2766,3 @@ window.archiveMonthlyReports = archiveMonthlyReports;
 window.deleteArchivedMonth = deleteArchivedMonth;
 window.softDeleteReport = softDeleteReport;
 window.restoreReport = restoreReport;
-
-
-document.addEventListener("input", e => {
-  if(e.target?.matches?.("input, textarea, select") && isFormPage()) markFormDirty(true);
-});
-
-document.addEventListener("change", e => {
-  if(e.target?.matches?.("input, textarea, select") && isFormPage()) markFormDirty(true);
-});
