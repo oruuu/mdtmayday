@@ -699,6 +699,7 @@ function nav(){
 }
 
 function go(page){
+  S.formDirty = false;
   S.loading = true;
   S.loadingText = `Membuka ${pageTitle(page)}...`;
   render();
@@ -728,7 +729,14 @@ function markFormDirty(v = true){
 }
 
 function shouldBlockAutoReload(){
-  return S.loading || S.formDirty || !!document.querySelector(".modal-backdrop, .modal, .dialog, [data-modal='true']");
+  const noAutoRefreshPages = ["attendance","reports","payroll","propam"];
+
+  return (
+    S.loading ||
+    S.formDirty ||
+    noAutoRefreshPages.includes(S.page) ||
+    !!document.querySelector(".modal-backdrop, .modal, .dialog, [data-modal='true']")
+  );
 }
 
 function setMemberSearchDraft(v){
@@ -1009,7 +1017,10 @@ function setupRealtimeWeb(){
   if(S.realtimeReady) return;
   S.realtimeReady = true;
 
+  const noAutoRefreshPages = ["attendance","reports","payroll","propam"];
+
   const reloadPersonnelSlow = async () => {
+    if(noAutoRefreshPages.includes(S.page)) return;
     if(shouldBlockAutoReload()) return;
 
     const now = Date.now();
@@ -1031,11 +1042,12 @@ function setupRealtimeWeb(){
       "postgres_changes",
       { event:"*", schema:"public", table:"profiles" },
       async payload => {
+        if(noAutoRefreshPages.includes(S.page)) return;
+        if(shouldBlockAutoReload()) return;
+
         const changed = payload.new || payload.old || {};
 
         if(S.profile?.id && Number(changed.id) === Number(S.profile.id)){
-          if(shouldBlockAutoReload()) return;
-
           await loadAll();
 
           const freshProfile = S.members.find(
@@ -1058,7 +1070,7 @@ function setupRealtimeWeb(){
     )
     .subscribe();
 
-  console.log("Realtime attendance/reports/propam/payroll/promotion dimatikan supaya form tidak refresh sendiri.");
+  console.log("Realtime otomatis untuk attendance/reports/propam/payroll/promotion dimatikan total. Form tidak akan render ulang sendiri.");
 }
 async function syncDiscord(){
   if(!S.profile?.discord_id) return toast("Discord ID belum tersedia.", "error");
@@ -1290,6 +1302,7 @@ async function submitAttendance(){
     if(error) throw error;
     await audit(`CREATE_${type}`, "attendance", "", item);
     await loadAll();
+    S.formDirty = false;
     toast(`${type} masuk ke log dan menunggu ACC.`, "success");
     go("log"); S.tab = "attendance"; render();
   }catch(err){ alert(err.message); }
@@ -2776,3 +2789,16 @@ window.archiveMonthlyReports = archiveMonthlyReports;
 window.deleteArchivedMonth = deleteArchivedMonth;
 window.softDeleteReport = softDeleteReport;
 window.restoreReport = restoreReport;
+
+
+document.addEventListener("input", e => {
+  if(e.target?.matches?.("input, textarea, select") && ["attendance","reports","payroll","propam"].includes(S.page)){
+    S.formDirty = true;
+  }
+});
+
+document.addEventListener("change", e => {
+  if(e.target?.matches?.("input, textarea, select") && ["attendance","reports","payroll","propam"].includes(S.page)){
+    S.formDirty = true;
+  }
+});
