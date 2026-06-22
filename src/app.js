@@ -8,6 +8,10 @@ const S = {
   page: "dashboard",
   tab: "today",
   search: "",
+  searchDraft: "",
+  memberDivisionFilter: "ALL",
+  memberRankFilter: "ALL",
+  formDirty: false,
   members: [],
   attendance: [],
   reports: [],
@@ -637,17 +641,6 @@ async function botEvent(event_type, payload = {}){
     return null;
   }
 }
-{
-  try{
-    await supabase.from("bot_events").insert({
-      event_type,
-      payload,
-      status: "PENDING"
-    });
-  }catch(err){
-    console.warn("bot event failed:", err.message);
-  }
-}
 
 async function uploadOne(file, folder){
   if(!file) return null;
@@ -706,6 +699,7 @@ function nav(){
 }
 
 function go(page){
+  S.formDirty = false;
   S.loading = true;
   S.loadingText = `Membuka ${pageTitle(page)}...`;
   render();
@@ -725,17 +719,75 @@ function setTab(tab){
   render();
 }
 
-function setSearch(v){
-  S.search = v;
+
+function isFormPage(){
+  return ["attendance","reports","payroll","propam","members","admin"].includes(S.page);
+}
+
+function markFormDirty(v = true){
+  S.formDirty = !!v;
+}
+
+function shouldBlockAutoReload(){
+  return S.loading || S.formDirty || !!document.querySelector(".modal-backdrop, .modal, .dialog, [data-modal='true']");
+}
+
+function applyMemberSearch(){
+  const el = document.querySelector("#member_search");
+  S.search = (el?.value || S.searchDraft || "").trim();
   render();
 }
 
+function setMemberSearchDraft(v){
+  S.searchDraft = v || "";
+}
+
+function setMemberDivisionFilter(v){
+  S.memberDivisionFilter = v || "ALL";
+  render();
+}
+
+function setMemberRankFilter(v){
+  S.memberRankFilter = v || "ALL";
+  render();
+}
+
+function clearMemberFilters(){
+  S.search = "";
+  S.searchDraft = "";
+  S.memberDivisionFilter = "ALL";
+  S.memberRankFilter = "ALL";
+  render();
+}
+
+function setSearch(v){
+  S.searchDraft = v || "";
+}
+
 function filteredMembers(){
-  const q = S.search.trim().toLowerCase();
-  if(!q) return S.members;
-  return S.members.filter(m => [
-    m.display_name, m.badge_number, m.jabatan, m.rank_detail, m.divisi, m.status, m.discord_id
-  ].some(x => String(x || "").toLowerCase().includes(q)));
+  const q = String(S.search || "").trim().toLowerCase();
+  const div = S.memberDivisionFilter || "ALL";
+  const rank = S.memberRankFilter || "ALL";
+
+  return S.members.filter(m => {
+    const matchText = !q || [
+      m.display_name,
+      m.server_nickname,
+      m.discord_nickname,
+      m.discord_username,
+      m.badge_number,
+      m.jabatan,
+      m.rank_detail,
+      m.divisi,
+      m.status,
+      m.discord_id
+    ].some(x => String(x || "").toLowerCase().includes(q));
+
+    const matchDiv = div === "ALL" || String(m.divisi || "") === div;
+    const matchRank = rank === "ALL" || String(m.rank_detail || m.jabatan || "") === rank || String(m.jabatan || "") === rank;
+
+    return matchText && matchDiv && matchRank;
+  });
 }
 
 function loginPage(){
@@ -908,23 +960,25 @@ function setupRealtimeWeb(){
   if(S.realtimeReady) return; S.realtimeReady = true;
 
   const reloadAndToast = async msg => {
+    if(shouldBlockAutoReload()){
+      console.log("Auto reload ditunda karena user sedang mengisi form:", msg);
+      return;
+    }
+
     await loadAll();
     toast(msg, "success");
     render();
   };
 
   const reloadPersonnelSlow = async () => {
-    const now = Date.now();
+    if(shouldBlockAutoReload()) return;
 
-    // profiles sering berubah karena last_seen / online_status.
-    // Supaya halaman Personel tidak ganggu, data personel maksimal reload 1x per 10 menit.
+    const now = Date.now();
     if(now - lastPersonnelRefreshAt < PERSONNEL_REFRESH_INTERVAL) return;
 
     lastPersonnelRefreshAt = now;
     await loadAll();
 
-    // Toast hanya muncul kalau user sedang di halaman personel/admin/dashboard,
-    // biar tidak spam saat update last_seen.
     if(["members","admin","dashboard"].includes(S.page)){
       toast("Data personel diperbarui. Refresh berikutnya maksimal 10 menit sekali.", "info");
     }
@@ -933,39 +987,27 @@ function setupRealtimeWeb(){
   };
 
   supabase
-  .channel("web-profiles-live")
-  .on(
-    "postgres_changes",
-    { event:"*", schema:"public", table:"profiles" },
-    async payload => {
+    .channel("web-profiles-live")
+    .on(
+      "postgres_changes",
+      { event:"*", schema:"public", table:"profiles" },
+      async payload => {
+        const changed = payload.new || payload.old || {};
 
-      const changed = payload.new || payload.old || {};
+        if(S.profile?.id && Number(changed.id) === Number(S.profile.id)){
+          if(shouldBlockAutoReload()) return;
 
-      if(
-        S.profile?.id &&
-        Number(changed.id) === Number(S.profile.id)
-      ){
-        await loadAll();
-
-        const freshProfile = S.members.find(
-          x => Number(x.id) === Number(S.profile.id)
-        );
-
-        if(freshProfile){
-          S.profile = {
-            ...S.profile,
-            ...freshProfile
-          };
+          await loadAll();
+          const freshProfile = S.members.find(x => Number(x.id) === Number(S.profile.id));
+          if(freshProfile) S.profile = { ...S.profile, ...freshProfile };
+          render();
+          return;
         }
 
-        render();
-        return;
+        await reloadPersonnelSlow();
       }
-
-      await reloadPersonnelSlow();
-    }
-  )
-  .subscribe();
+    )
+    .subscribe();
 
   supabase.channel("web-attendance-live").on("postgres_changes", { event:"*", schema:"public", table:"attendance" }, () => reloadAndToast("Data absensi diperbarui")).subscribe();
   supabase.channel("web-reports-live").on("postgres_changes", { event:"*", schema:"public", table:"reports" }, () => reloadAndToast("Laporan baru masuk")).subscribe();
@@ -2501,35 +2543,17 @@ async function saveMember(id){
 
     if(error) throw error;
 
-    S.members = S.members.map(m =>
-      Number(m.id) === Number(id) ? { ...m, ...data } : m
-    );
+    S.members = S.members.map(m => Number(m.id) === Number(id) ? { ...m, ...data } : m);
+    if(Number(S.profile?.id) === Number(id)) S.profile = { ...S.profile, ...data };
 
-    if(Number(S.profile?.id) === Number(id)){
-      S.profile = { ...S.profile, ...data };
-    }
-
+    S.formDirty = false;
     closeModal();
     toast("Data anggota berhasil diperbarui.", "success");
     S.loading = false;
     render();
 
-    audit("UPDATE_MEMBER", "profiles", id, {
-      old,
-      new: updateData
-    }).catch(err => console.warn("audit failed:", err.message));
-
-    botEvent("MEMBER_UPDATED", {
-      id,
-      nama: display_name,
-      badge_number,
-      jabatan,
-      rank_detail,
-      divisi,
-      status,
-      requested_by: userDisplayName()
-    }).catch(err => console.warn("botEvent failed:", err.message));
-
+    audit("UPDATE_MEMBER", "profiles", id, { old, new: updateData }).catch(err => console.warn("audit failed:", err.message));
+    botEvent("MEMBER_UPDATED", { id, nama: display_name, badge_number, jabatan, rank_detail, divisi, status, requested_by: userDisplayName() }).catch(err => console.warn("botEvent failed:", err.message));
   }catch(err){
     S.loading = false;
     render();
@@ -2689,3 +2713,12 @@ window.archiveMonthlyReports = archiveMonthlyReports;
 window.deleteArchivedMonth = deleteArchivedMonth;
 window.softDeleteReport = softDeleteReport;
 window.restoreReport = restoreReport;
+
+
+document.addEventListener("input", e => {
+  if(e.target?.matches?.("input, textarea, select") && isFormPage()) markFormDirty(true);
+});
+
+document.addEventListener("change", e => {
+  if(e.target?.matches?.("input, textarea, select") && isFormPage()) markFormDirty(true);
+});
