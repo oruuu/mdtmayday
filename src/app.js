@@ -765,23 +765,47 @@ function setSearch(v){
 
 
 function memberSearchFilterPanel(){
-  return `${memberSearchFilterPanel()}
+  return `
+    <div class="member-search-panel">
+      <input
+        id="member_search"
+        placeholder="Cari nama / badge / Discord ID lalu tekan Enter..."
+        value="${e(S.searchDraft || S.search || "")}"
+        oninput="setMemberSearchDraft(this.value)"
+        onkeydown="if(event.key === 'Enter') applyMemberSearch()"
+      />
 
-    <div class="field">
-      <label>Filter Rank</label>
-      <select onchange="setMemberRankFilter(this.value)">
-        <option value="" ${!S.memberRankFilter ? "selected" : ""}>SEMUA RANK</option>
-        ${RANK.map(x => `<option value="${e(x)}" ${S.memberRankFilter===x ? "selected" : ""}>${e(x)}</option>`).join("")}
-      </select>
+      <button class="btn small blue" onclick="applyMemberSearch()">CARI</button>
+      <button class="btn small" onclick="clearMemberFilters()">RESET</button>
     </div>
-  </div>
 
-  ${(S.search || S.memberDivisionFilter || S.memberRankFilter) ? `<div class="filter-summary">
-    Filter aktif:
-    ${S.search ? `<b>Pencarian: ${e(S.search)}</b>` : ""}
-    ${S.memberDivisionFilter ? `<b>Divisi: ${e(S.memberDivisionFilter)}</b>` : ""}
-    ${S.memberRankFilter ? `<b>Rank: ${e(S.memberRankFilter)}</b>` : ""}
-  </div>` : ""}`;
+    <div class="member-filter-grid">
+      <div class="field">
+        <label>Filter Divisi</label>
+        <select onchange="setMemberDivisionFilter(this.value)">
+          <option value="" ${!S.memberDivisionFilter ? "selected" : ""}>SEMUA DIVISI</option>
+          ${DIV.map(x => `<option value="${e(x)}" ${S.memberDivisionFilter === x ? "selected" : ""}>${e(x)}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Filter Rank</label>
+        <select onchange="setMemberRankFilter(this.value)">
+          <option value="" ${!S.memberRankFilter ? "selected" : ""}>SEMUA RANK</option>
+          ${RANK.map(x => `<option value="${e(x)}" ${S.memberRankFilter === x ? "selected" : ""}>${e(x)}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+
+    ${(S.search || S.memberDivisionFilter || S.memberRankFilter) ? `
+      <div class="filter-summary">
+        Filter aktif:
+        ${S.search ? `<b>Pencarian: ${e(S.search)}</b>` : ""}
+        ${S.memberDivisionFilter ? `<b>Divisi: ${e(S.memberDivisionFilter)}</b>` : ""}
+        ${S.memberRankFilter ? `<b>Rank: ${e(S.memberRankFilter)}</b>` : ""}
+      </div>
+    ` : ""}
+  `;
 }
 
 function filteredMembers(){
