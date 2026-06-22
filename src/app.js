@@ -24,7 +24,7 @@ const S = {
   currentReport: "PATROLI",
   archiveMonth: new Date().toISOString().slice(0,7),
   loading: false,
-  loadingText: "Memuat data MDT...",
+  loadingText: "Memuat data WEB...",
   realtimeReady: false,
   notifications: [],
   theme: localStorage.getItem("mayday_theme") || "light"
@@ -450,7 +450,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function pageTitle(page = S.page){
   const map = { dashboard:"Dashboard", attendance:"Absensi", log:"Activity Log", reports:"Laporan", propam:"Propam", payroll:"Payroll", admin:"Admin Panel", members:"Data Personel" };
-  return map[page] || "Mayday MDT";
+  return map[page] || "Mayday WEB";
 }
 
 function userDisplayName(p = S.profile){
@@ -476,7 +476,7 @@ function drawToasts(){
   box.innerHTML = S.notifications.map(n => `<div class="toast ${e(n.type)}">${e(n.message)}</div>`).join("");
 }
 function loadingOverlay(){
-  return S.loading ? `<div class="loading-screen"><div class="loading-card"><img src="/logo.png"/><h2>MAYDAY MDT</h2><p>${e(S.loadingText || "Loading...")}</p><div class="loader-line"><span></span></div></div></div>` : "";
+  return S.loading ? `<div class="loading-screen"><div class="loading-card"><img src="/logo.png"/><h2>MAYDAY WEB</h2><p>${e(S.loadingText || "Loading...")}</p><div class="loader-line"><span></span></div></div></div>` : "";
 }
 function skeletonPage(title = "MEMUAT"){
   return `<main class="app">${top(title)}<main class="page">
@@ -489,7 +489,7 @@ async function withLoading(text, fn){
 function sidebar(){
   if(!S.profile || S.profile.status !== "ACTIVE") return "";
   const items = [["dashboard","🏠","Dashboard"],["attendance","📋","Absensi"],["log","↺","Activity Log"],["reports","📄","Laporan"],["members","👮","Personel"],["propam","⚖️","Propam"],["payroll","💵","Payroll"],...(high() ? [["admin","⚙","Admin"]] : [])];
-  return `<aside class="sidebar"><div class="sidebar-brand"><img src="/logo.png"/><div><b>MAYDAY MDT</b><span>Command Center</span></div></div><div class="sidebar-user"><img src="${e(S.profile.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName())}</b><span>${e(S.profile.rank_detail || S.profile.jabatan || "-")} • ${e(S.profile.divisi || "-")}</span></div></div><nav class="sidebar-nav">${items.map(([id,ic,tx])=>`<button class="${S.page===id ? "active" : ""}" onclick="go('${id}')"><span>${ic}</span>${tx}</button>`).join("")}</nav><div class="sidebar-footer"><button class="theme-toggle" onclick="toggleTheme()">${S.theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode"}</button><button class="theme-toggle" onclick="syncDiscord()">Sync Discord</button><button class="theme-toggle danger" onclick="logout()">Logout</button></div></aside>`;
+  return `<aside class="sidebar"><div class="sidebar-brand"><img src="/logo.png"/><div><b>MAYDAY WEB</b><span>Command Center</span></div></div><div class="sidebar-user"><img src="${e(S.profile.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName())}</b><span>${e(S.profile.rank_detail || S.profile.jabatan || "-")} • ${e(S.profile.divisi || "-")}</span></div></div><nav class="sidebar-nav">${items.map(([id,ic,tx])=>`<button class="${S.page===id ? "active" : ""}" onclick="go('${id}')"><span>${ic}</span>${tx}</button>`).join("")}</nav><div class="sidebar-footer"><button class="theme-toggle" onclick="toggleTheme()">${S.theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode"}</button><button class="theme-toggle" onclick="syncDiscord()">Sync Discord</button><button class="theme-toggle danger" onclick="logout()">Logout</button></div></aside>`;
 }
 function shell(content){
   return `<div class="layout-shell ${S.theme === "dark" ? "dark-mode" : ""}">${sidebar()}<div class="layout-main page-anim">${content}</div>${loadingOverlay()}</div>`;
@@ -499,7 +499,7 @@ function shell(content){
 async function init(){
   document.documentElement.dataset.theme = S.theme;
   S.loading = true;
-  S.loadingText = "Membuka Mayday MDT...";
+  S.loadingText = "Membuka Mayday WEB...";
   render();
   const { data } = await supabase.auth.getUser();
   S.user = data.user;
@@ -668,7 +668,7 @@ function top(title){
       <img src="/logo.png"/>
       <div>
         <h1>${title}</h1>
-        <small>MAYDAY POLICE MDT V2.2</small>
+        <small>MAYDAY POLICE WEB V3.4</small>
       </div>
     </div>
     <div class="top-actions">
@@ -842,7 +842,7 @@ function filteredMembers(){
 function loginPage(){
   return `<main class="app login-screen">
     <section class="login-frame">
-      <div class="login-head">OFFICIAL MDT V2.2</div>
+      <div class="login-head">OFFICIAL WEB V3.4</div>
       <img src="/logo.png" class="logo"/>
       <h2 class="big-title">MAYDAY<br><span style="color:#2563eb">POLICE</span></h2>
       <div class="badge">MOBILE DATA TERMINAL</div>
