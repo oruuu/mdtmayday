@@ -2476,38 +2476,50 @@ async function saveMember(id){
 
   if(!display_name) return toast("Nama tidak boleh kosong.", "error");
 
-  await withLoading("Menyimpan data anggota...", async () => {
-    const { error } = await supabase
+  try{
+    S.loading = true;
+    S.loadingText = "Menyimpan data anggota...";
+    render();
+
+    const updateData = {
+      display_name,
+      discord_nickname: display_name,
+      server_nickname: display_name,
+      badge_number,
+      jabatan,
+      rank_detail,
+      divisi,
+      status
+    };
+
+    const { data, error } = await supabase
       .from("profiles")
-      .update({
-        display_name,
-        discord_nickname: display_name,
-        server_nickname: display_name,
-        badge_number,
-        jabatan,
-        rank_detail,
-        divisi,
-        status
-      })
-      .eq("id", id);
+      .update(updateData)
+      .eq("id", id)
+      .select("*")
+      .single();
 
     if(error) throw error;
 
-    await audit("UPDATE_MEMBER", "profiles", id, {
-      old,
-      new: {
-        display_name,
-        discord_nickname: display_name,
-        server_nickname: display_name,
-        badge_number,
-        jabatan,
-        rank_detail,
-        divisi,
-        status
-      }
-    });
+    S.members = S.members.map(m =>
+      Number(m.id) === Number(id) ? { ...m, ...data } : m
+    );
 
-    await botEvent("MEMBER_UPDATED", {
+    if(Number(S.profile?.id) === Number(id)){
+      S.profile = { ...S.profile, ...data };
+    }
+
+    closeModal();
+    toast("Data anggota berhasil diperbarui.", "success");
+    S.loading = false;
+    render();
+
+    audit("UPDATE_MEMBER", "profiles", id, {
+      old,
+      new: updateData
+    }).catch(err => console.warn("audit failed:", err.message));
+
+    botEvent("MEMBER_UPDATED", {
       id,
       nama: display_name,
       badge_number,
@@ -2516,19 +2528,13 @@ async function saveMember(id){
       divisi,
       status,
       requested_by: userDisplayName()
-    });
+    }).catch(err => console.warn("botEvent failed:", err.message));
 
-    await loadAll();
-
-    const freshProfile = S.members.find(x => Number(x.id) === Number(S.profile?.id));
-    if(freshProfile){
-      S.profile = { ...S.profile, ...freshProfile };
-    }
-
-    closeModal();
-    toast("Data anggota berhasil diperbarui.", "success");
+  }catch(err){
+    S.loading = false;
     render();
-  });
+    toast(`Gagal simpan anggota: ${err.message}`, "error");
+  }
 }
 
 async function approveUser(id){
