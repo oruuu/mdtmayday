@@ -1177,67 +1177,84 @@ html[data-theme="dark"] .report-archive-pre{
   color:#e5edff!important;
 }
 
-
 /* ===============================
-   MEMBER SEARCH SELECT FILTER FINAL
+   MEMBER SEARCH + DROPDOWN FILTER
 ================================== */
 .member-search-panel{
-  display:grid;
-  grid-template-columns:1fr auto auto;
-  gap:10px;
-  align-items:center;
-  margin:12px 0;
+  display:grid!important;
+  grid-template-columns:1fr auto auto!important;
+  gap:10px!important;
+  align-items:center!important;
+  margin:12px 0 14px!important;
 }
 
 .member-search-panel input{
   margin:0!important;
+  height:48px!important;
 }
 
 .member-search-panel .btn{
   margin:0!important;
   width:auto!important;
-  white-space:nowrap;
+  height:48px!important;
+  white-space:nowrap!important;
+  padding:10px 16px!important;
 }
 
 .member-filter-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:12px;
-  margin:10px 0 16px;
+  display:grid!important;
+  grid-template-columns:1fr 1fr!important;
+  gap:12px!important;
+  margin:10px 0 16px!important;
 }
 
 .member-filter-grid .field{
   margin:0!important;
 }
 
+.member-filter-grid label{
+  margin-bottom:6px!important;
+}
+
 .member-filter-grid select{
   margin:0!important;
+  height:48px!important;
 }
 
 .filter-summary{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  align-items:center;
-  background:#e0f2fe;
-  border:3px solid #000;
-  border-radius:16px;
-  padding:10px;
-  margin:8px 0 16px;
-  font-size:12px;
-  font-weight:1000;
+  display:flex!important;
+  flex-wrap:wrap!important;
+  gap:8px!important;
+  align-items:center!important;
+  background:#e0f2fe!important;
+  border:3px solid #000!important;
+  border-radius:16px!important;
+  padding:10px!important;
+  margin:8px 0 16px!important;
+  font-size:12px!important;
+  font-weight:1000!important;
 }
 
 .filter-summary b{
-  background:#fff;
-  border:2px solid #000;
-  border-radius:999px;
-  padding:4px 8px;
+  background:#fff!important;
+  border:2px solid #000!important;
+  border-radius:999px!important;
+  padding:4px 8px!important;
+}
+
+html[data-theme="dark"] .filter-summary{
+  background:#0f172a!important;
+  color:#e5edff!important;
+}
+
+html[data-theme="dark"] .filter-summary b{
+  background:#020617!important;
+  color:#e5edff!important;
 }
 
 @media(max-width:560px){
   .member-search-panel{
-    grid-template-columns:1fr;
+    grid-template-columns:1fr!important;
   }
 
   .member-search-panel .btn{
@@ -1245,6 +1262,6 @@ html[data-theme="dark"] .report-archive-pre{
   }
 
   .member-filter-grid{
-    grid-template-columns:1fr;
+    grid-template-columns:1fr!important;
   }
 }
