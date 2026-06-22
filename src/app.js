@@ -1006,18 +1006,8 @@ function liveMemberCard(){
   return `<section class="card"><div class="section-head"><div><h2>LIVE MEMBER</h2><p class="mini">Anggota yang aktif dalam 5 menit terakhir.</p></div><span class="status ACTIVE">${online.length} ONLINE</span></div><div class="live-grid">${online.map(m=>`<div class="live-member"><img src="${e(m.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName(m))}</b><span>${e(m.rank_detail || m.jabatan || "-")} • ${e(m.divisi || "-")}</span></div></div>`).join("") || `<div class="empty">Belum ada anggota online.</div>`}</div></section>`;
 }
 function setupRealtimeWeb(){
-  if(S.realtimeReady) return; S.realtimeReady = true;
-
-  const reloadAndToast = async msg => {
-    if(shouldBlockAutoReload()){
-      console.log("Auto reload ditunda karena user sedang mengisi form:", msg);
-      return;
-    }
-
-    await loadAll();
-    toast(msg, "success");
-    render();
-  };
+  if(S.realtimeReady) return;
+  S.realtimeReady = true;
 
   const reloadPersonnelSlow = async () => {
     if(shouldBlockAutoReload()) return;
@@ -1029,7 +1019,7 @@ function setupRealtimeWeb(){
     await loadAll();
 
     if(["members","admin","dashboard"].includes(S.page)){
-      toast("Data personel diperbarui. Refresh berikutnya maksimal 10 menit sekali.", "info");
+      toast("Data personel diperbarui.", "info");
     }
 
     render();
@@ -1068,11 +1058,7 @@ function setupRealtimeWeb(){
     )
     .subscribe();
 
-  supabase.channel("web-attendance-live").on("postgres_changes", { event:"*", schema:"public", table:"attendance" }, () => reloadAndToast("Data absensi diperbarui")).subscribe();
-  supabase.channel("web-reports-live").on("postgres_changes", { event:"*", schema:"public", table:"reports" }, () => reloadAndToast("Laporan baru masuk")).subscribe();
-  supabase.channel("web-propam-live").on("postgres_changes", { event:"*", schema:"public", table:"disciplinary_records" }, () => reloadAndToast("Data Propam diperbarui")).subscribe();
-  supabase.channel("web-payroll-live").on("postgres_changes", { event:"*", schema:"public", table:"payrolls" }, () => reloadAndToast("Payroll diperbarui")).subscribe();
-  supabase.channel("web-promotion-live").on("postgres_changes", { event:"*", schema:"public", table:"promotion_requests" }, () => reloadAndToast("Pengajuan kenaikan pangkat diperbarui")).subscribe();
+  console.log("Realtime attendance/reports/propam/payroll/promotion dimatikan supaya form tidak refresh sendiri.");
 }
 async function syncDiscord(){
   if(!S.profile?.discord_id) return toast("Discord ID belum tersedia.", "error");
