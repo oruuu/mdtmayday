@@ -369,9 +369,32 @@ function money(v){
 function roundPoint(v){ return Math.round(Number(v || 0) * 100) / 100; }
 function dutyPointFromMinutes(minutes){ return roundPoint((Number(minutes || 0) / 60) * POINTS_PER_HOUR); }
 function payrollFromPoints(points){ return Math.round(Number(points || 0) * PAYROLL_PER_POINT); }
+function normalizeManualTime(value){
+  const raw = String(value || "").trim();
+  if(!raw) return "";
+  let cleaned = raw.replace(".", ":").replace(/\s+/g, "");
+
+  if(/^\d{1,2}$/.test(cleaned)){
+    cleaned = cleaned.padStart(2, "0") + ":00";
+  }else if(/^\d{3,4}$/.test(cleaned)){
+    cleaned = cleaned.padStart(4, "0");
+    cleaned = cleaned.slice(0,2) + ":" + cleaned.slice(2);
+  }
+
+  const match = cleaned.match(/^(\d{1,2}):(\d{1,2})$/);
+  if(!match) return "";
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+
+  if(hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+  return `${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`;
+}
+
 function combineDateTime(date, time){
-  if(!date || !time) return null;
-  return new Date(`${date}T${time}:00`);
+  const t = normalizeManualTime(time);
+  if(!date || !t) return null;
+  return new Date(`${date}T${t}:00`);
 }
 function calcDutyFromInputs(){
   const sd = document.querySelector("#duty_start_date")?.value;
@@ -393,7 +416,7 @@ function updateDutyPreview(){
   if(type !== "ABSENSI"){ preview.innerHTML = ""; return; }
   const d = calcDutyFromInputs();
   if(!d){
-    preview.innerHTML = `<div class="payroll-preview warning-soft">Isi tanggal dan jam ONDUTY / OFFDUTY.</div>`;
+    preview.innerHTML = `<div class="payroll-preview warning-soft">Isi tanggal dan jam ONDUTY / OFFDUTY format 24 jam, contoh 08:30 atau 1730.</div>`;
     return;
   }
   const valid = d.minutes >= MIN_DUTY_MINUTES;
@@ -1169,11 +1192,11 @@ function attendanceForm(){
       <h3>DATA DUTY</h3>
       <div class="row">
         <div class="field"><label>Tanggal ONDUTY</label><input id="duty_start_date" type="date" value="${today}" onchange="updateDutyPreview()"/></div>
-        <div class="field"><label>Jam ONDUTY</label><input id="duty_start_time" type="time" onchange="updateDutyPreview()"/></div>
+        <div class="field"><label>Jam ONDUTY Manual 24 Jam</label><input id="duty_start_time" type="text" inputmode="numeric" placeholder="Contoh 08:30 / 0830 / 8" oninput="updateDutyPreview()"/></div>
       </div>
       <div class="row">
         <div class="field"><label>Tanggal OFFDUTY</label><input id="duty_end_date" type="date" value="${today}" onchange="updateDutyPreview()"/></div>
-        <div class="field"><label>Jam OFFDUTY</label><input id="duty_end_time" type="time" onchange="updateDutyPreview()"/></div>
+        <div class="field"><label>Jam OFFDUTY Manual 24 Jam</label><input id="duty_end_time" type="text" inputmode="numeric" placeholder="Contoh 17:45 / 1745 / 17" oninput="updateDutyPreview()"/></div>
       </div>
       <div id="duty_preview"></div>
     </div>
@@ -1227,7 +1250,7 @@ function attendanceTableBlock(title, cls, rows, desc){
           <td><span class="mini">${detail}</span></td>
           <td>${e(r.note || "-")}<br>${r.location ? `<span class="mini">${e(r.location)}</span>` : ""}${r.approval_note ? `<br><span class="mini">ACC: ${e(r.approval_note)}</span>` : ""}${r.reject_reason ? `<br><span class="mini">Alasan Tolak: ${e(r.reject_reason)}</span>` : ""}<p><b>Activity Point:</b> ${reportPointValue(r.type)} point</p>
     ${renderEvidenceLinks(r)}</td>
-          ${canApproveAttendance() ? `<td>${r.status === "PENDING" ? `<button class="btn small green" onclick="approveAttendance(${r.id})">ACC</button><button class="btn small red" onclick="rejectAttendance(${r.id})">TOLAK</button>` : `<span class="mini">oleh ${e(r.approved_by || "-")}</span>`}</td>` : ""}
+          ${canApproveAttendance() ? `<td>${r.status === "PENDING" ? `<button class="btn small green" onclick="approveAttendance(${r.id})">ACC</button><button class="btn small red" onclick="rejectAttendance(${r.id})">TOLAK</button>` : `<span class="mini">oleh ${e(r.approved_by || "-")}</span>${r.status === "APPROVED" ? `<button class="btn small red" onclick="deleteAttendance(${r.id})">HAPUS</button>` : ""}`}</td>` : ""}
         </tr>`;
       }).join("")}</tbody></table>` : `<div class="empty">Tidak ada data ${title.toLowerCase()}.</div>`}
   </section>`;
@@ -1263,9 +1286,9 @@ async function submitAttendance(){
       if(d.minutes < MIN_DUTY_MINUTES) return alert(`Minimal duty ${MIN_DUTY_MINUTES} menit.`);
       dutyData = {
         duty_start_date: document.querySelector("#duty_start_date").value,
-        duty_start_time: document.querySelector("#duty_start_time").value,
+        duty_start_time: normalizeManualTime(document.querySelector("#duty_start_time").value),
         duty_end_date: document.querySelector("#duty_end_date").value,
-        duty_end_time: document.querySelector("#duty_end_time").value,
+        duty_end_time: normalizeManualTime(document.querySelector("#duty_end_time").value),
         duty_start_at: d.start.toISOString(),
         duty_end_at: d.end.toISOString(),
         total_minutes: d.minutes,
@@ -1337,6 +1360,70 @@ async function approveAttendance(id){
   await loadAll();
   toast("Pengajuan berhasil di-ACC.", "success");
   render();
+}
+
+async function deleteAttendance(id){
+  if(!canApproveAttendance()) return alert("Akses ditolak. Hanya PATI / SUPER ADMIN yang bisa menghapus absensi.");
+  const row = S.attendance.find(x => Number(x.id) === Number(id));
+  if(!row) return alert("Data absensi tidak ditemukan.");
+
+  if(row.status !== "APPROVED"){
+    return alert("Hapus absensi dari fitur ini hanya untuk data yang sudah DISETUJUI.");
+  }
+
+  const reason = prompt(`Alasan hapus absensi ${row.nama}?`);
+  if(!reason || !reason.trim()) return alert("Alasan hapus absensi wajib diisi.");
+
+  if(!confirm("Yakin hapus absensi yang sudah ACC? Duty point dan payroll akan dikurangi ulang.")) return;
+
+  try{
+    S.loading = true;
+    S.loadingText = "Menghapus absensi...";
+    render();
+
+    if(String(row.type || "").toUpperCase() === "ABSENSI"){
+      const member = S.members.find(x => Number(x.id) === Number(row.user_id));
+      const nextDutyMinutes = Math.max(0, Number(member?.duty_minutes || 0) - Number(row.total_minutes || 0));
+      const nextDutyPoints = Math.max(0, roundPoint(Number(member?.duty_points || 0) - Number(row.total_points || 0)));
+      const nextPayroll = Math.max(0, Number(member?.pending_payroll || 0) - Number(row.payroll_value || 0));
+
+      const prof = await supabase.from("profiles").update({
+        duty_minutes: nextDutyMinutes,
+        duty_points: nextDutyPoints,
+        pending_payroll: nextPayroll
+      }).eq("id", row.user_id);
+
+      if(prof.error) throw prof.error;
+    }
+
+    await audit("DELETE_APPROVED_ATTENDANCE", "attendance", id, {
+      row,
+      deleted_by: userDisplayName(),
+      reason
+    });
+
+    await botEvent("ATTENDANCE_DELETED", {
+      id,
+      nama: row.nama,
+      divisi: row.divisi,
+      badge_number: row.badge_number,
+      type: row.type,
+      deleted_by: userDisplayName(),
+      reason
+    });
+
+    const { error } = await supabase.from("attendance").delete().eq("id", id);
+    if(error) throw error;
+
+    await loadAll();
+    toast("Absensi ACC berhasil dihapus dan point/payroll dikoreksi.", "success");
+    S.loading = false;
+    render();
+  }catch(err){
+    S.loading = false;
+    render();
+    toast(`Gagal hapus absensi: ${err.message}`, "error");
+  }
 }
 
 async function rejectAttendance(id){
@@ -2137,7 +2224,7 @@ function logTable(title, rows, type){
             ${r.status === "PENDING" ? `
               <button class="btn small green" onclick="approveAttendance(${r.id})">ACC</button>
               <button class="btn small red" onclick="rejectAttendance(${r.id})">TOLAK</button>
-            ` : `<span class="mini">${e(r.approved_by || "-")}</span>`}
+            ` : `<span class="mini">${e(r.approved_by || "-")}</span>${r.status === "APPROVED" ? `<button class="btn small red" onclick="deleteAttendance(${r.id})">HAPUS</button>` : ""}`}
           </td>` : ""}
           ${type === "reports" ? `<td><button class="btn small" onclick="exportReportPDF(${r.id})">PDF</button></td>` : ""}
         </tr>`).join("")}
@@ -2524,6 +2611,11 @@ function openMemberEditor(id){
     <div class="field"><label>Rank Detail</label><select id="edit_rank">${RANK.map(x => `<option ${m.rank_detail===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Divisi</label><select id="edit_divisi">${DIV.map(x => `<option ${m.divisi===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Status</label><select id="edit_status">${statusOptions(m.status)}</select></div>
+    ${admin() ? `<div class="point-editor-grid">
+      <div class="field"><label>Duty Point</label><input id="edit_duty_points" type="number" step="0.01" min="0" value="${Number(m.duty_points || 0)}"/></div>
+      <div class="field"><label>Total Point Activity</label><input id="edit_activity_points_total" type="number" step="0.01" min="0" value="${Number(m.activity_points_total || 0)}"/></div>
+    </div>
+    <p class="mini">Hanya PATI / SUPER ADMIN yang bisa edit point manual. Masuk audit log.</p>` : ""}
     <button class="btn green" onclick="saveMember(${m.id})">SIMPAN</button>
     ${canDeleteMember() ? `<button class="btn red danger-delete" onclick="deleteMember(${m.id})">HAPUS ANGGOTA</button>` : ""}
     <button class="btn" onclick="closeModal()">BATAL</button>
@@ -2573,6 +2665,8 @@ async function saveMember(id){
   const rank_detail = document.querySelector("#edit_rank")?.value || "";
   const divisi = document.querySelector("#edit_divisi")?.value || "";
   const status = document.querySelector("#edit_status")?.value || "";
+  const duty_points = Number(document.querySelector("#edit_duty_points")?.value || 0);
+  const activity_points_total = Number(document.querySelector("#edit_activity_points_total")?.value || 0);
 
   if(!display_name) return toast("Nama tidak boleh kosong.", "error");
 
@@ -2591,6 +2685,11 @@ async function saveMember(id){
       divisi,
       status
     };
+
+    if(admin()){
+      updateData.duty_points = Math.max(0, duty_points);
+      updateData.activity_points_total = Math.max(0, activity_points_total);
+    }
 
     const { data, error } = await supabase
       .from("profiles")
@@ -2627,6 +2726,8 @@ async function saveMember(id){
       rank_detail,
       divisi,
       status,
+      duty_points: admin() ? Math.max(0, duty_points) : undefined,
+      activity_points_total: admin() ? Math.max(0, activity_points_total) : undefined,
       requested_by: userDisplayName()
     }).catch(err => console.warn("botEvent failed:", err.message));
 
@@ -2742,6 +2843,7 @@ Object.assign(window, {
   refreshAbsensiFormMode,
   approveAttendance,
   rejectAttendance,
+  deleteAttendance,
   setReportCat,
   submitReport,
   exportReportPDF,

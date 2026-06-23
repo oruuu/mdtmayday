@@ -1265,3 +1265,26 @@ html[data-theme="dark"] .filter-summary b{
     grid-template-columns:1fr!important;
   }
 }
+
+/* ===============================
+   POINT EDITOR + MANUAL TIME PATCH
+================================== */
+.point-editor-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  background:#f8fafc;
+  border:4px solid #000;
+  border-radius:18px;
+  padding:12px;
+  margin:12px 0;
+}
+
+html[data-theme="dark"] .point-editor-grid{
+  background:#0f172a!important;
+}
+
+input[inputmode="numeric"]{
+  letter-spacing:1px;
+  font-weight:900;
+}
