@@ -472,7 +472,7 @@ function canDeleteMember(){
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function pageTitle(page = S.page){
-  const map = { dashboard:"Dashboard", attendance:"Absensi", log:"Activity Log", reports:"Laporan", propam:"Propam", payroll:"Payroll", admin:"Admin Panel", members:"Data Personel" };
+  const map = { dashboard:"Dashboard", attendance:"Absensi", log:"Activity Log", reports:"Laporan", propam:"Propam", payroll:"Payroll", admin:"Admin Panel", members:"Data Personel", leaderboard:"Leaderboard" };
   return map[page] || "Mayday WEB";
 }
 
@@ -511,7 +511,7 @@ async function withLoading(text, fn){
 }
 function sidebar(){
   if(!S.profile || S.profile.status !== "ACTIVE") return "";
-  const items = [["dashboard","🏠","Dashboard"],["attendance","📋","Absensi"],["log","↺","Activity Log"],["reports","📄","Laporan"],["members","👮","Personel"],["propam","⚖️","Propam"],["payroll","💵","Payroll"],...(high() ? [["admin","⚙","Admin"]] : [])];
+  const items = [["dashboard","🏠","Dashboard"],["attendance","📋","Absensi"],["log","↺","Activity Log"],["reports","📄","Laporan"],["members","👮","Personel"],["propam","⚖️","Propam"],["payroll","💵","Payroll"],...(high() ? [["leaderboard","🏆","Leaderboard"],["admin","⚙","Admin"]] : [])];
   return `<aside class="sidebar"><div class="sidebar-brand"><img src="/logo.png"/><div><b>POLICE MAYDAY</b><span>Command Center</span></div></div><div class="sidebar-user"><img src="${e(S.profile.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName())}</b><span>${e(S.profile.rank_detail || S.profile.jabatan || "-")} • ${e(S.profile.divisi || "-")}</span></div></div><nav class="sidebar-nav">${items.map(([id,ic,tx])=>`<button class="${S.page===id ? "active" : ""}" onclick="go('${id}')"><span>${ic}</span>${tx}</button>`).join("")}</nav><div class="sidebar-footer"><button class="theme-toggle" onclick="toggleTheme()">${S.theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode"}</button><button class="theme-toggle" onclick="syncDiscord()">Sync Discord</button><button class="theme-toggle danger" onclick="logout()">Logout</button></div></aside>`;
 }
 function shell(content){
@@ -711,6 +711,7 @@ function nav(){
     ["members","👮","PERSONEL"],
     ["propam","⚖️","PROPAM"],
     ["payroll","💵","GAJI"],
+    ...(high() ? [["leaderboard","🏆","RANK"]] : []),
     ["admin","⚙","ADMIN"]
   ];
 
@@ -731,6 +732,7 @@ function go(page){
     if(page === "attendance") S.tab = canApproveAttendance() ? "pending" : "form";
     else if(page === "admin") S.tab = "today";
     else if(page === "members") S.tab = "list";
+    else if(page === "leaderboard") S.tab = "duty";
     else S.tab = "today";
     S.loading = false;
     render();
@@ -979,7 +981,7 @@ function dashboard(){
         <button class="tile" onclick="go('propam')"><div class="icon">⚖️</div>PROPAM<small>SP / PTDH</small></button>
         <button class="tile" onclick="go('payroll')"><div class="icon">💵</div>PAYROLL<small>Pengajuan gaji</small></button>
         <button class="tile" onclick="go('log')"><div class="icon">↺</div>LOG<small>Activity log</small></button>
-        ${high() ? `<button class="tile" onclick="go('admin')"><div class="icon">⚙</div>ADMIN<small>Panel petinggi</small></button>` : ""}
+        ${high() ? `<button class="tile" onclick="go('leaderboard')"><div class="icon">🏆</div>LEADERBOARD<small>Duty & activity point</small></button><button class="tile" onclick="go('admin')"><div class="icon">⚙</div>ADMIN<small>Panel petinggi</small></button>` : ""}
       </section>
 
       ${activityProgressCard()}
@@ -1036,6 +1038,92 @@ function liveMemberCard(){
   const online = S.members.filter(isOnline).slice(0,12);
   return `<section class="card"><div class="section-head"><div><h2>LIVE MEMBER</h2><p class="mini">Anggota yang aktif dalam 5 menit terakhir.</p></div><span class="status ACTIVE">${online.length} ONLINE</span></div><div class="live-grid">${online.map(m=>`<div class="live-member"><img src="${e(m.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName(m))}</b><span>${e(m.rank_detail || m.jabatan || "-")} • ${e(m.divisi || "-")}</span></div></div>`).join("") || `<div class="empty">Belum ada anggota online.</div>`}</div></section>`;
 }
+
+function leaderboardPage(){
+  if(!high()) return blocked("LEADERBOARD KHUSUS PATI / SUPER ADMIN.");
+
+  const dutyRows = [...S.members].sort((a,b) => Number(b.duty_points || 0) - Number(a.duty_points || 0));
+  const activityRows = [...S.members].sort((a,b) => Number(b.activity_points_month || 0) - Number(a.activity_points_month || 0));
+  const totalActivityRows = [...S.members].sort((a,b) => Number(b.activity_points_total || 0) - Number(a.activity_points_total || 0));
+
+  return `<main class="app">
+    ${top("LEADERBOARD PERSONEL")}
+    <main class="page">
+      <section class="card yellow">
+        <div class="section-head">
+          <div>
+            <h2>LEADERBOARD DUTY POINT & ACTIVITY</h2>
+            <p class="mini">Khusus PATI / SUPER ADMIN. Menampilkan semua user yang ada di database.</p>
+          </div>
+          <span class="status APPROVED">${S.members.length} USER</span>
+        </div>
+
+        <div class="tabs">
+          <button class="${S.tab === "duty" ? "active" : ""}" onclick="setTab('duty')">DUTY POINT</button>
+          <button class="${S.tab === "activity" ? "active" : ""}" onclick="setTab('activity')">ACTIVITY BULAN INI</button>
+          <button class="${S.tab === "totalActivity" ? "active" : ""}" onclick="setTab('totalActivity')">TOTAL ACTIVITY</button>
+        </div>
+      </section>
+
+      ${S.tab === "activity" ? leaderboardTable("ACTIVITY POINT BULAN INI", activityRows, "activity") : ""}
+      ${S.tab === "totalActivity" ? leaderboardTable("TOTAL ACTIVITY POINT", totalActivityRows, "totalActivity") : ""}
+      ${S.tab === "duty" ? leaderboardTable("DUTY POINT", dutyRows, "duty") : ""}
+    </main>${nav()}
+  </main>`;
+}
+
+function leaderboardTable(title, rows, mode){
+  return `<section class="card leaderboard-window">
+    <h2>${e(title)}</h2>
+    ${rows.length ? `<table class="table leaderboard-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Anggota</th>
+          <th>Rank / Divisi</th>
+          <th>Duty</th>
+          <th>Activity</th>
+          <th>Payroll</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((m,i) => {
+          const progress = rankProgress(m);
+          const pointText = progress.unlimited ? `${Number(m.activity_points_month || 0)} / ∞` : `${Number(m.activity_points_month || 0)} / ${progress.cap}`;
+          return `<tr>
+            <td><b>#${i+1}</b></td>
+            <td>
+              <div class="leader-member">
+                <img src="${e(m.avatar_url || "/logo.png")}"/>
+                <div>
+                  <b>${e(userDisplayName(m))}</b>
+                  <span>${e(m.badge_number || "NO BADGE")} • ${e(m.discord_username || "-")}</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              <b>${e(normalizeRank(m.rank_detail || m.jabatan || "-"))}</b><br>
+              <span class="mini">${e(normalizeDivisi(m.divisi || "-"))}</span>
+            </td>
+            <td>
+              <b>${Number(m.duty_points || 0)}</b> point<br>
+              <span class="mini">${Number(m.duty_minutes || 0)} menit</span>
+            </td>
+            <td>
+              <b>${e(pointText)}</b><br>
+              <span class="mini">Total: ${Number(m.activity_points_total || 0)}</span>
+            </td>
+            <td>${money(m.pending_payroll || 0)}</td>
+            <td><span class="status ${e(m.status || "")}">${e(statusLabel(m.status))}</span></td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>` : `<div class="empty">Belum ada data anggota.</div>`}
+  </section>`;
+}
+
+
 function setupRealtimeWeb(){
   if(S.realtimeReady) return;
   S.realtimeReady = true;
@@ -2825,7 +2913,7 @@ function render(){
   if(!S.user){ app.innerHTML = loginPage() + loadingOverlay(); drawToasts(); return; }
   if(!S.profile){ app.innerHTML = skeletonPage("MEMUAT PROFIL") + loadingOverlay(); drawToasts(); return; }
   if(S.profile?.status !== "ACTIVE" && S.profile?.jabatan !== "SUPER ADMIN"){ app.innerHTML = pending() + loadingOverlay(); drawToasts(); return; }
-  const map = { dashboard, attendance:attendancePage, reports:reportsPage, members:membersPage, propam:propamPage, log:logPage, payroll:payrollPage, admin:adminPage };
+  const map = { dashboard, attendance:attendancePage, reports:reportsPage, members:membersPage, propam:propamPage, log:logPage, payroll:payrollPage, leaderboard:leaderboardPage, admin:adminPage };
   const content = (map[S.page] || dashboard)();
   app.innerHTML = shell(content);
   drawToasts();
