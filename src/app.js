@@ -914,14 +914,14 @@ function memberSearchFilterPanel(){
 }
 
 function filteredMembers(){
-  const q = String(S.search || "").trim().toLowerCase();
-  const div = String(S.memberDivisionFilter || "").trim();
-  const rank = String(S.memberRankFilter || "").trim();
+  const q = String(S.search || S.searchDraft || "").trim().toLowerCase();
+  const div = String(S.memberDivisionFilter || "").trim().toUpperCase();
+  const rank = String(S.memberRankFilter || "").trim().toUpperCase();
 
   return S.members.filter(m => {
     const memberName = userDisplayName(m);
 
-    const matchText = !q || [
+    const textSource = [
       memberName,
       m.display_name,
       m.server_nickname,
@@ -933,12 +933,15 @@ function filteredMembers(){
       m.divisi,
       m.status,
       m.discord_id
-    ].some(x => String(x || "").toLowerCase().includes(q));
+    ].map(x => String(x || "").toLowerCase()).join(" ");
 
-    const matchDiv = !div || String(m.divisi || "") === div;
-    const matchRank = !rank ||
-      String(m.rank_detail || "") === rank ||
-      String(m.jabatan || "") === rank;
+    const memberDiv = normalizeDivisi(m.divisi).toUpperCase();
+    const memberRank = normalizeRank(m.rank_detail || m.jabatan).toUpperCase();
+    const memberJabatan = String(m.jabatan || "").trim().toUpperCase();
+
+    const matchText = !q || textSource.includes(q);
+    const matchDiv = !div || memberDiv === div;
+    const matchRank = !rank || rank === "SEMUA RANK" || memberRank === rank || memberJabatan === rank;
 
     return matchText && matchDiv && matchRank;
   });
