@@ -842,7 +842,8 @@ function setMemberSearchDraft(v){
 
 function applyMemberSearch(){
   const el = document.querySelector("#member_search");
-  S.search = String(el?.value || S.searchDraft || "").trim();
+  S.search = String(el?.value || "").trim();
+  S.searchDraft = S.search;
   render();
 }
 
@@ -914,7 +915,7 @@ function memberSearchFilterPanel(){
 }
 
 function filteredMembers(){
-  const q = String(S.search || S.searchDraft || "").trim().toLowerCase();
+  const q = String(S.search || "").trim().toLowerCase();
   const div = String(S.memberDivisionFilter || "").trim().toUpperCase();
   const rank = String(S.memberRankFilter || "").trim().toUpperCase();
 
@@ -2179,7 +2180,7 @@ async function forceRefreshPersonnel(){
 
 function membersPage(){
   const rows = filteredMembers();
-  const hasFilter = !!(S.search || S.searchDraft || S.memberDivisionFilter || S.memberRankFilter);
+  const hasFilter = !!(S.search || S.memberDivisionFilter || S.memberRankFilter);
 
   return `<main class="app">
     ${top("DATA PERSONEL")}
