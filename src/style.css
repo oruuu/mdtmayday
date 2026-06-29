@@ -1441,3 +1441,80 @@ html[data-theme="dark"] .duty-note{
 html[data-theme="dark"] .duty-note li{
   color:#cbd5e1;
 }
+/* ===============================
+   MEMBER FILTER & PAYROLL PATCH
+================================== */
+
+.member-filter-grid{
+    display:grid;
+    grid-template-columns:2fr 1fr 1fr auto;
+    gap:12px;
+    margin-top:12px;
+    align-items:end;
+}
+
+.member-filter-actions{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+}
+
+.split-actions{
+    display:flex;
+    gap:12px;
+    justify-content:flex-end;
+    align-items:center;
+    margin-top:14px;
+    flex-wrap:wrap;
+}
+
+.split-actions .btn{
+    min-width:220px;
+}
+
+.btn.blue{
+    background:#2563eb;
+    color:#fff;
+}
+
+.btn.blue:hover{
+    background:#1d4ed8;
+}
+
+.btn.green{
+    background:#16a34a;
+    color:#fff;
+}
+
+.btn.green:hover{
+    background:#15803d;
+}
+
+.btn.red{
+    background:#dc2626;
+    color:#fff;
+}
+
+.btn.red:hover{
+    background:#b91c1c;
+}
+
+@media (max-width:900px){
+
+.member-filter-grid{
+    grid-template-columns:1fr;
+}
+
+.member-filter-actions{
+    flex-direction:column;
+}
+
+.split-actions{
+    flex-direction:column;
+}
+
+.split-actions .btn{
+    width:100%;
+}
+
+}

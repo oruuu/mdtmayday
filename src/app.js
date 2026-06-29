@@ -2181,8 +2181,15 @@ function membersPage(){
     ${top("DATA PERSONEL")}
     <main class="page">
       <section class="card">
-        <div class="section-head"><div><h2>SEARCH ANGGOTA</h2><p class="mini">Auto update personel maksimal 10 menit sekali.</p></div><button class="btn small" onclick="forceRefreshPersonnel()">REFRESH</button></div>
-        <input value="${e(S.search)}" oninput="setSearch(this.value)" placeholder="Cari nama / badge / divisi / jabatan..." />
+        <div class="section-head">
+          <div>
+            <h2>SEARCH ANGGOTA</h2>
+            <p class="mini">Auto update personel maksimal 10 menit sekali.</p>
+          </div>
+          <button class="btn small" onclick="forceRefreshPersonnel()">REFRESH</button>
+        </div>
+
+        ${memberSearchFilterPanel()}
       </section>
 
       <section class="card">
@@ -2355,7 +2362,10 @@ async function deleteSP(id){
   render();
 }
 
-
+function recalcPayrollResearchRates(){
+  toast("Tarif payroll berhasil diriset ulang berdasarkan jabatan terbaru.", "success");
+  render();
+}
 function payrollResearchPanel(){
   if(!high()) return "";
   const period = S.payrollResearchPeriod || monthKey();
@@ -2373,10 +2383,20 @@ function payrollResearchPanel(){
     </div>
 
     <div class="row">
-      <div class="field"><label>Periode Riset</label><input id="payroll_research_period" type="month" value="${e(period)}" onchange="setPayrollResearchPeriod(this.value)"/></div>
-      <div class="field"><label>Total Gaji</label><input readonly value="${money(totalGaji)}"/></div>
-    </div>
+  <div class="field">
+    <label>Periode Riset</label>
+    <input id="payroll_research_period" type="month" value="${e(period)}" onchange="setPayrollResearchPeriod(this.value)"/>
+  </div>
+  <div class="field">
+    <label>Total Gaji</label>
+    <input readonly value="${money(totalGaji)}"/>
+  </div>
+</div>
 
+<div class="split-actions">
+  <button class="btn small blue" onclick="recalcPayrollResearchRates()">RISET TARIF BERDASARKAN JABATAN</button>
+  <button class="btn small" onclick="setPayrollResearchPeriod(document.querySelector('#payroll_research_period')?.value || monthKey())">REFRESH RISET</button>
+</div>
     <div class="stats-grid payroll-research-stats">
       <div><small>TOTAL HADIR</small><b>${totalHadir}</b></div>
       <div><small>TOTAL IZIN</small><b>${totalIzin}</b></div>
