@@ -2179,6 +2179,7 @@ async function forceRefreshPersonnel(){
 
 function membersPage(){
   const rows = filteredMembers();
+  const hasFilter = !!(S.search || S.searchDraft || S.memberDivisionFilter || S.memberRankFilter);
 
   return `<main class="app">
     ${top("DATA PERSONEL")}
@@ -2195,6 +2196,17 @@ function membersPage(){
         ${memberSearchFilterPanel()}
       </section>
 
+      ${hasFilter ? `<section class="card yellow">
+        <div class="section-head">
+          <div>
+            <h2>HASIL PENCARIAN</h2>
+            <p class="mini">Ditemukan ${rows.length} anggota sesuai filter.</p>
+          </div>
+          <span class="status APPROVED">${rows.length} DATA</span>
+        </div>
+        ${rows.map(m => memberMini(m, true)).join("") || `<div class="empty">Tidak ditemukan.</div>`}
+      </section>` : ""}
+
       <section class="card">
         <h2>ANGGOTA ONLINE</h2>
         ${S.members.filter(isOnline).map(m=>memberMini(m)).join("") || `<div class="empty">Belum ada anggota online.</div>`}
@@ -2202,7 +2214,10 @@ function membersPage(){
 
       <section class="card">
         <h2>DATA ANGGOTA</h2>
-        ${rows.map(m => memberMini(m, true)).join("") || `<div class="empty">Tidak ditemukan.</div>`}
+        ${hasFilter
+          ? `<div class="empty">Data utama disembunyikan saat filter aktif. Lihat hasil di panel HASIL PENCARIAN.</div>`
+          : S.members.map(m => memberMini(m, true)).join("") || `<div class="empty">Belum ada data anggota.</div>`
+        }
       </section>
     </main>${nav()}
   </main>`;
