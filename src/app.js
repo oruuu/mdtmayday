@@ -85,7 +85,7 @@ const PAYROLL_RATE_BY_JABATAN = {
   "PAMA": 42900,
   "PAMEN": 50000,
   "PATI": 60000,
-  "SUPER ADMIN": 0
+  "SUPER ADMIN": 35714
 };
 
 const LEAVE_PAYROLL_DEDUCTION = 4000;
@@ -471,16 +471,28 @@ function updateDutyPreview(){
   const type = document.querySelector("#abs_type")?.value || "ABSENSI";
   const preview = document.querySelector("#duty_preview");
   if(!preview) return;
-  if(type !== "ABSENSI"){ preview.innerHTML = ""; return; }
+
   const rate = salaryRateForMember(S.profile);
-  preview.innerHTML = `<div class="payroll-preview ok">
-    <div><small>SISTEM</small><b>PER ABSENSI</b></div>
-    <div><small>JABATAN</small><b>${e(payrollJabatan(S.profile) || "-")}</b></div>
-    <div><small>TARIF</small><b>${money(rate)}</b></div>
-    <div><small>SETELAH ACC</small><b>+${money(rate)}</b></div>
-    <p>Duty point tidak dipakai lagi untuk payroll.</p>
+
+  if(type === "ABSENSI"){
+    preview.innerHTML = `<div class="payroll-preview ok">
+      <div><small>SISTEM</small><b>PER ABSENSI</b></div>
+      <div><small>JABATAN</small><b>${e(payrollJabatan(S.profile) || "-")}</b></div>
+      <div><small>TARIF</small><b>${money(rate)}</b></div>
+      <div><small>SETELAH ACC</small><b>+${money(rate)}</b></div>
+      <p>Jam ON/OFF Duty disimpan sebagai data administrasi. Gaji tetap dihitung per absensi yang di-ACC.</p>
+    </div>`;
+    return;
+  }
+
+  preview.innerHTML = `<div class="payroll-preview danger">
+    <div><small>JENIS</small><b>${e(type)}</b></div>
+    <div><small>POTONGAN</small><b>-${money(LEAVE_PAYROLL_DEDUCTION)}</b></div>
+    <div><small>SETELAH ACC</small><b>Payroll berkurang</b></div>
+    <p>Izin/Cuti wajib isi tanggal dan jam mulai sampai selesai.</p>
   </div>`;
 }
+
 function refreshAbsensiFormMode(){
   const type = document.querySelector("#abs_type")?.value || "ABSENSI";
   const duty = document.querySelector("#duty_fields");
@@ -488,11 +500,18 @@ function refreshAbsensiFormMode(){
   const cuti = document.querySelector("#cuti_fields");
   const lokasi = document.querySelector("#location_field");
   const fileLabel = document.querySelector("#abs_file_label");
+
   if(duty) duty.style.display = type === "ABSENSI" ? "block" : "none";
   if(izin) izin.style.display = type === "IZIN" ? "block" : "none";
   if(cuti) cuti.style.display = type === "CUTI" ? "block" : "none";
   if(lokasi) lokasi.style.display = type === "ABSENSI" ? "block" : "none";
-  if(fileLabel) fileLabel.textContent = type === "ABSENSI" ? "Bukti Foto Wajib Bisa Lebih Dari 1" : "Bukti Foto Opsional Bisa Lebih Dari 1";
+
+  if(fileLabel){
+    fileLabel.textContent = type === "ABSENSI"
+      ? "Bukti Foto Wajib Bisa Lebih Dari 1"
+      : "Bukti Foto Opsional Bisa Lebih Dari 1";
+  }
+
   updateDutyPreview();
 }
 
@@ -1338,16 +1357,46 @@ function attendanceForm(){
     <div id="abs_type_hint" class="type-hint absensi"><b>ABSENSI</b><span>Per absensi yang di-ACC langsung masuk payroll sesuai jabatan: ${money(rate)}.</span></div>
 
     <div id="duty_fields" class="form-window absensi-window">
-      <h3>DATA ABSENSI</h3>
-      <p class="mini">Jam ON/OFF tidak dihitung untuk gaji. Gaji dihitung per absensi yang di-ACC.</p>
-      <div class="row">
-        <div class="field"><label>Tanggal Absensi</label><input id="duty_start_date" type="date" value="${today}"/></div>
-        <div class="field"><label>Jam Absensi Manual 24 Jam</label><input id="duty_start_time" type="text" inputmode="numeric" placeholder="Contoh 08:30 / 0830"/></div>
-      </div>
-      <input id="duty_end_date" type="hidden" value="${today}"/>
-      <input id="duty_end_time" type="hidden" value="00:00"/>
-      <div id="duty_preview"><div class="payroll-preview ok"><div><small>TARIF ABSENSI</small><b>${money(rate)}</b></div><div><small>POTONGAN IZIN/CUTI</small><b>${money(LEAVE_PAYROLL_DEDUCTION)}</b></div></div></div>
+  <h3>DATA DUTY</h3>
+  <p class="mini">Jam duty disimpan untuk administrasi. Payroll tetap dihitung per absensi yang di-ACC.</p>
+
+  <div class="row">
+    <div class="field">
+      <label>Tanggal ON DUTY</label>
+      <input id="duty_start_date" type="date" value="${today}" onchange="markFormDirty(); updateDutyPreview()"/>
     </div>
+    <div class="field">
+      <label>Jam ON DUTY Manual 24 Jam</label>
+      <input id="duty_start_time" type="text" inputmode="numeric" placeholder="Contoh 08:30 / 08.30" oninput="markFormDirty(); updateDutyPreview()"/>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>Tanggal OFF DUTY</label>
+      <input id="duty_end_date" type="date" value="${today}" onchange="markFormDirty(); updateDutyPreview()"/>
+    </div>
+    <div class="field">
+      <label>Jam OFF DUTY Manual 24 Jam</label>
+      <input id="duty_end_time" type="text" inputmode="numeric" placeholder="Contoh 17:30 / 17.30" oninput="markFormDirty(); updateDutyPreview()"/>
+    </div>
+  </div>
+
+  <div id="duty_preview"></div>
+
+  <div class="duty-note">
+    <b>KETERANGAN DUTY</b>
+    <ul>
+      <li>Tanggal dan jam ON DUTY wajib diisi.</li>
+      <li>Tanggal dan jam OFF DUTY wajib diisi.</li>
+      <li>Format jam memakai 24 jam, contoh 08.30 atau 08:30.</li>
+      <li>Jam duty hanya untuk administrasi kehadiran personel.</li>
+      <li>Payroll tidak dihitung dari lama jam duty.</li>
+      <li>Payroll dihitung dari absensi yang sudah di-ACC.</li>
+      <li>Izin dan cuti mengurangi gaji Rp4.000 setelah di-ACC.</li>
+    </ul>
+  </div>
+</div>
 
     <div id="izin_fields" class="form-window izin-window" style="display:none">
       <h3>DATA IZIN</h3>
@@ -1432,35 +1481,86 @@ async function submitAttendance(){
     let leaveData = {};
 
     if(kind === "ABSENSI"){
-      const date = document.querySelector("#duty_start_date")?.value || new Date().toISOString().slice(0,10);
-      const time = normalizeManualTime(document.querySelector("#duty_start_time")?.value || "00:00") || "00:00";
-      const start = new Date(`${date}T${time}:00`);
-      dutyData = {
-        duty_start_date: date,
-        duty_start_time: time,
-        duty_end_date: date,
-        duty_end_time: time,
-        duty_start_at: start.toISOString(),
-        duty_end_at: start.toISOString(),
-        total_minutes: 0,
-        total_hours: 0,
-        total_points: 0,
-        payroll_value: attendancePayrollValue(p, kind)
-      };
-    }
+  const startDate = document.querySelector("#duty_start_date")?.value;
+  const startTime = normalizeManualTime(document.querySelector("#duty_start_time")?.value);
+  const endDate = document.querySelector("#duty_end_date")?.value;
+  const endTime = normalizeManualTime(document.querySelector("#duty_end_time")?.value);
+
+  if(!startDate || !startTime || !endDate || !endTime){
+    return alert("Tanggal dan jam ON DUTY / OFF DUTY wajib diisi.");
+  }
+
+  const start = new Date(`${startDate}T${startTime}:00`);
+  const end = new Date(`${endDate}T${endTime}:00`);
+
+  if(isNaN(start.getTime()) || isNaN(end.getTime())){
+    return alert("Format tanggal atau jam duty tidak valid.");
+  }
+
+  if(end.getTime() <= start.getTime()){
+    return alert("Jam OFF DUTY harus lebih besar dari jam ON DUTY.");
+  }
+
+  const minutes = Math.floor((end.getTime() - start.getTime()) / 60000);
+
+  dutyData = {
+    duty_start_date: startDate,
+    duty_start_time: startTime,
+    duty_end_date: endDate,
+    duty_end_time: endTime,
+    duty_start_at: start.toISOString(),
+    duty_end_at: end.toISOString(),
+    total_minutes: minutes,
+    total_hours: Math.round((minutes / 60) * 100) / 100,
+    total_points: 0,
+    payroll_value: attendancePayrollValue(p, kind)
+  };
+}
 
     if(kind === "IZIN"){
-      const d = document.querySelector("#izin_date")?.value;
-      if(!d) return alert("Tanggal izin wajib diisi.");
-      leaveData = { leave_start_date:d, leave_end_date:d, payroll_value: attendancePayrollValue(p, kind) };
-    }
+  const startDate = document.querySelector("#izin_start_date")?.value;
+  const startTime = normalizeManualTime(document.querySelector("#izin_start_time")?.value);
+  const endDate = document.querySelector("#izin_end_date")?.value;
+  const endTime = normalizeManualTime(document.querySelector("#izin_end_time")?.value);
 
-    if(kind === "CUTI"){
-      const s = document.querySelector("#cuti_start")?.value;
-      const eDate = document.querySelector("#cuti_end")?.value;
-      if(!s || !eDate) return alert("Tanggal mulai dan selesai cuti wajib diisi.");
-      leaveData = { leave_start_date:s, leave_end_date:eDate, payroll_value: attendancePayrollValue(p, kind) };
-    }
+  if(!startDate || !startTime || !endDate || !endTime){
+    return alert("Tanggal dan jam izin wajib diisi lengkap.");
+  }
+
+  leaveData = {
+    leave_start_date: startDate,
+    leave_start_time: startTime,
+    leave_end_date: endDate,
+    leave_end_time: endTime,
+    payroll_value: attendancePayrollValue(p, kind)
+  };
+}
+
+if(kind === "CUTI"){
+  const startDate = document.querySelector("#cuti_start_date")?.value;
+  const startTime = normalizeManualTime(document.querySelector("#cuti_start_time")?.value);
+  const endDate = document.querySelector("#cuti_end_date")?.value;
+  const endTime = normalizeManualTime(document.querySelector("#cuti_end_time")?.value);
+
+  if(!startDate || !startTime || !endDate || !endTime){
+    return alert("Tanggal dan jam cuti wajib diisi lengkap.");
+  }
+
+  const start = new Date(`${startDate}T${startTime}:00`);
+  const end = new Date(`${endDate}T${endTime}:00`);
+
+  if(end.getTime() <= start.getTime()){
+    return alert("Tanggal/jam selesai cuti tidak boleh sebelum tanggal/jam mulai.");
+  }
+
+  leaveData = {
+    leave_start_date: startDate,
+    leave_start_time: startTime,
+    leave_end_date: endDate,
+    leave_end_time: endTime,
+    payroll_value: attendancePayrollValue(p, kind)
+  };
+}
 
     const urls = await uploadMany(files, "attendance");
     const { error } = await supabase.from("attendance").insert({
