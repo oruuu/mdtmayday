@@ -135,16 +135,6 @@ function payrollStatsForMember(member = S.profile, period = monthKey()){
   return row || { member, hadir:0, izin:0, cuti:0, rate:salaryRateForMember(member), gross:0, deduction:0, total:0, paid:false };
 }
 
-function memberPayrollCounters(member = S.profile){
-  return {
-    attendance: Number(member?.attendance_count || 0),
-    izin: Number(member?.izin_count || 0),
-    cuti: Number(member?.cuti_count || 0),
-    pending: Number(member?.pending_payroll || 0),
-    total: Number(member?.total_payroll_received || 0)
-  };
-}
-
 
 function normalizeRank(rank){
   const r = String(rank || "").trim();
@@ -310,7 +300,7 @@ function reportArchivePanel(){
     <div class="archive-list">
       ${rows.map(r => `<div class="list-item">
         <h3>${e(reportTypeLabel(r.type))} - ${e(r.nama)}</h3>
-        <div class="mini">${e(monthNameID(reportMonthKey(r)))} â€¢ <span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span></div>
+        <div class="mini">${e(monthNameID(reportMonthKey(r)))} • <span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span></div>
         ${r.type === "KRIMINAL" ? `<pre class="report-archive-pre">${e(formatArrestReport(r))}</pre>` : `<p>${e((r.payload || {}).chronology || (r.payload || {}).summary || (r.payload || {}).area || "-")}</p>`}
         ${renderEvidenceLinks(r)}
         <div class="split-actions">
@@ -574,8 +564,8 @@ async function withLoading(text, fn){
 }
 function sidebar(){
   if(!S.profile || S.profile.status !== "ACTIVE") return "";
-  const items = [["dashboard","ðŸ ","Dashboard"],["attendance","ðŸ“‹","Absensi"],["log","â†º","Activity Log"],["reports","ðŸ“„","Laporan"],["members","ðŸ‘®","Personel"],["propam","âš–ï¸","Propam"],["payroll","ðŸ’µ","Payroll"],...(high() ? [["leaderboard","ðŸ†","Leaderboard"],["admin","âš™","Admin"]] : [])];
-  return `<aside class="sidebar"><div class="sidebar-brand"><img src="/logo.png"/><div><b>POLICE MAYDAY</b><span>Command Center</span></div></div><div class="sidebar-user"><img src="${e(S.profile.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName())}</b><span>${e(S.profile.rank_detail || S.profile.jabatan || "-")} â€¢ ${e(S.profile.divisi || "-")}</span></div></div><nav class="sidebar-nav">${items.map(([id,ic,tx])=>`<button class="${S.page===id ? "active" : ""}" onclick="go('${id}')"><span>${ic}</span>${tx}</button>`).join("")}</nav><div class="sidebar-footer"><button class="theme-toggle" onclick="toggleTheme()">${S.theme === "dark" ? "â˜€ï¸ Light Mode" : "ðŸŒ™ Dark Mode"}</button><button class="theme-toggle" onclick="syncDiscord()">Sync Discord</button><button class="theme-toggle danger" onclick="logout()">Logout</button></div></aside>`;
+  const items = [["dashboard","🏠","Dashboard"],["attendance","📋","Absensi"],["log","↺","Activity Log"],["reports","📄","Laporan"],["members","👮","Personel"],["propam","⚖️","Propam"],["payroll","💵","Payroll"],...(high() ? [["leaderboard","🏆","Leaderboard"],["admin","⚙","Admin"]] : [])];
+  return `<aside class="sidebar"><div class="sidebar-brand"><img src="/logo.png"/><div><b>POLICE MAYDAY</b><span>Command Center</span></div></div><div class="sidebar-user"><img src="${e(S.profile.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName())}</b><span>${e(S.profile.rank_detail || S.profile.jabatan || "-")} • ${e(S.profile.divisi || "-")}</span></div></div><nav class="sidebar-nav">${items.map(([id,ic,tx])=>`<button class="${S.page===id ? "active" : ""}" onclick="go('${id}')"><span>${ic}</span>${tx}</button>`).join("")}</nav><div class="sidebar-footer"><button class="theme-toggle" onclick="toggleTheme()">${S.theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode"}</button><button class="theme-toggle" onclick="syncDiscord()">Sync Discord</button><button class="theme-toggle danger" onclick="logout()">Logout</button></div></aside>`;
 }
 function shell(content){
   return `<div class="layout-shell ${S.theme === "dark" ? "dark-mode" : ""}">${sidebar()}<div class="layout-main page-anim">${content}</div>${loadingOverlay()}</div>`;
@@ -748,7 +738,7 @@ async function uploadMany(files, folder){
 
 function top(title){
   const p = S.profile;
-  const exit = S.page !== "dashboard" ? `<button class="exit-btn" onclick="go('dashboard')">â† KELUAR KE MENU</button>` : "";
+  const exit = S.page !== "dashboard" ? `<button class="exit-btn" onclick="go('dashboard')">← KELUAR KE MENU</button>` : "";
   return `<header class="topbar">
     <div class="top-title">
       <img src="/logo.png"/>
@@ -759,7 +749,7 @@ function top(title){
     </div>
     <div class="top-actions">
       ${exit}
-      ${p ? `<button class="exit-btn theme-mini" onclick="toggleTheme()">${S.theme === "dark" ? "â˜€ï¸" : "ðŸŒ™"}</button>` : ""}
+      ${p ? `<button class="exit-btn theme-mini" onclick="toggleTheme()">${S.theme === "dark" ? "☀️" : "🌙"}</button>` : ""}
       ${p ? `<img class="avatar" src="${e(p.avatar_url || "/logo.png")}"/>` : ""}
     </div>
   </header>`;
@@ -767,15 +757,15 @@ function top(title){
 
 function nav(){
   const items = [
-    ["dashboard","ðŸ ","HOME"],
-    ["attendance","ðŸ“‹","ABSENSI"],
-    ["log","â†º","LOG"],
-    ["reports","ðŸ“„","LAPORAN"],
-    ["members","ðŸ‘®","PERSONEL"],
-    ["propam","âš–ï¸","PROPAM"],
-    ["payroll","ðŸ’µ","GAJI"],
-    ...(high() ? [["leaderboard","ðŸ†","RANK"]] : []),
-    ["admin","âš™","ADMIN"]
+    ["dashboard","🏠","HOME"],
+    ["attendance","📋","ABSENSI"],
+    ["log","↺","LOG"],
+    ["reports","📄","LAPORAN"],
+    ["members","👮","PERSONEL"],
+    ["propam","⚖️","PROPAM"],
+    ["payroll","💵","GAJI"],
+    ...(high() ? [["leaderboard","🏆","RANK"]] : []),
+    ["admin","⚙","ADMIN"]
   ];
 
   return `<nav class="nav nav-seven">${items.map(([id,ic,tx]) => `
@@ -795,7 +785,7 @@ function go(page){
     if(page === "attendance") S.tab = canApproveAttendance() ? "pending" : "form";
     else if(page === "admin") S.tab = "today";
     else if(page === "members") S.tab = "list";
-    else if(page === "leaderboard") S.tab = "payroll";
+    else if(page === "leaderboard") S.tab = "duty";
     else S.tab = "today";
     S.loading = false;
     render();
@@ -981,7 +971,6 @@ function pending(){
 
 function dashboard(){
   const p = S.profile;
-  const pc = memberPayrollCounters(p);
   const today = new Date().toISOString().slice(0,10);
   const mkey = monthKey();
   const todayAbs = S.attendance.filter(x => (x.created_at || "").slice(0,10) === today && String(x.type || "").toUpperCase() === "ABSENSI");
@@ -1016,13 +1005,10 @@ function dashboard(){
              <b>${e((p.divisi || "BELUM SET").trim?.() || "BELUM SET")}</b>
          </div>
       </div>
-          <p class="mini white-mini">Last login: ${fmt(p.last_login)} â€¢ Last seen: ${fmt(p.last_seen)}</p>
-          <div class="payroll-mini dashboard-payroll-mini">
-            <div><small>ABSENSI</small><b>${pc.attendance}</b></div>
-            <div><small>IZIN</small><b>${pc.izin}</b></div>
-            <div><small>CUTI</small><b>${pc.cuti}</b></div>
-            <div><small>PENDING PAYROLL</small><b>${money(pc.pending)}</b></div>
-            <div><small>TOTAL PAYROLL</small><b>${money(pc.total)}</b></div>
+          <p class="mini white-mini">Last login: ${fmt(p.last_login)} • Last seen: ${fmt(p.last_seen)}</p>
+          <div class="payroll-mini">
+            <div><small>TARIF / ABSENSI</small><b>${money(salaryRateForMember(p))}</b></div>
+            <div><small>SALDO GAJI</small><b>${money(p.pending_payroll || 0)}</b></div>
           </div>
         </section>
 
@@ -1042,13 +1028,13 @@ function dashboard(){
       </div>
 
       <section class="grid">
-        <button class="tile" onclick="go('attendance')"><div class="icon">ðŸ“‹</div>ABSENSI<small>Input / ACC absensi</small></button>
-        <button class="tile" onclick="go('reports')"><div class="icon">ðŸ“„</div>LAPORAN<small>OPS & export PDF</small></button>
-        <button class="tile" onclick="go('members')"><div class="icon">ðŸ‘®</div>PERSONEL<small>Online / search / riwayat</small></button>
-        <button class="tile" onclick="go('propam')"><div class="icon">âš–ï¸</div>PROPAM<small>SP / PTDH</small></button>
-        <button class="tile" onclick="go('payroll')"><div class="icon">ðŸ’µ</div>PAYROLL<small>Pengajuan gaji</small></button>
-        <button class="tile" onclick="go('log')"><div class="icon">â†º</div>LOG<small>Activity log</small></button>
-        ${high() ? `<button class="tile" onclick="go('leaderboard')"><div class="icon">ðŸ†</div>LEADERBOARD<small>Payroll & activity</small></button><button class="tile" onclick="go('admin')"><div class="icon">âš™</div>ADMIN<small>Panel petinggi</small></button>` : ""}
+        <button class="tile" onclick="go('attendance')"><div class="icon">📋</div>ABSENSI<small>Input / ACC absensi</small></button>
+        <button class="tile" onclick="go('reports')"><div class="icon">📄</div>LAPORAN<small>OPS & export PDF</small></button>
+        <button class="tile" onclick="go('members')"><div class="icon">👮</div>PERSONEL<small>Online / search / riwayat</small></button>
+        <button class="tile" onclick="go('propam')"><div class="icon">⚖️</div>PROPAM<small>SP / PTDH</small></button>
+        <button class="tile" onclick="go('payroll')"><div class="icon">💵</div>PAYROLL<small>Pengajuan gaji</small></button>
+        <button class="tile" onclick="go('log')"><div class="icon">↺</div>LOG<small>Activity log</small></button>
+        ${high() ? `<button class="tile" onclick="go('leaderboard')"><div class="icon">🏆</div>LEADERBOARD<small>Payroll & activity</small></button><button class="tile" onclick="go('admin')"><div class="icon">⚙</div>ADMIN<small>Panel petinggi</small></button>` : ""}
       </section>
 
       ${activityProgressCard()}
@@ -1077,7 +1063,7 @@ function activityProgressCard(){
     <div class="activity-rank-row">
       <div><small>RANK SAAT INI</small><b>${e(pr.rank)}</b></div>
       <div><small>RANK TUJUAN</small><b>${e(pr.target || "MAX RANK")}</b></div>
-      <div><small>PROGRESS</small><b>${pr.unlimited ? "âˆž" : `${pr.pct}%`}</b></div>
+      <div><small>PROGRESS</small><b>${pr.unlimited ? "∞" : `${pr.pct}%`}</b></div>
     </div>
 
     <div class="activity-progress"><span style="width:${pr.pct}%"></span></div>
@@ -1088,10 +1074,11 @@ function activityProgressCard(){
 
 function leaderboardCard(){
   const rows = [...S.members].sort((a,b) => Number(b.pending_payroll || 0) - Number(a.pending_payroll || 0)).slice(0,10);
-  return `<section class="card"><h2>LEADERBOARD PAYROLL</h2>
-    ${rows.some(r => Number(r.pending_payroll || 0) > 0) ? rows.map((r,i) => `<div class="leader-row"><b>#${i+1} ${e(userDisplayName(r))}</b><span>${e(r.jabatan || "-")} - Pending ${money(r.pending_payroll || 0)} - Total ${money(r.total_payroll_received || 0)}</span></div>`).join("") : `<div class="empty">Belum ada saldo payroll.</div>`}
+  return `<section class="card"><h2>LEADERBOARD SALDO GAJI</h2>
+    ${rows.some(r => Number(r.pending_payroll || 0) > 0) ? rows.map((r,i) => `<div class="leader-row"><b>#${i+1} ${e(userDisplayName(r))}</b><span>${e(r.jabatan || "-")} • ${money(r.pending_payroll || 0)}</span></div>`).join("") : `<div class="empty">Belum ada saldo payroll.</div>`}
   </section>`;
 }
+
 
 function commandStatsCard(){
   const divMap = {};
@@ -1102,7 +1089,7 @@ function commandStatsCard(){
 }
 function liveMemberCard(){
   const online = S.members.filter(isOnline).slice(0,12);
-  return `<section class="card"><div class="section-head"><div><h2>LIVE MEMBER</h2><p class="mini">Anggota yang aktif dalam 5 menit terakhir.</p></div><span class="status ACTIVE">${online.length} ONLINE</span></div><div class="live-grid">${online.map(m=>`<div class="live-member"><img src="${e(m.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName(m))}</b><span>${e(m.rank_detail || m.jabatan || "-")} â€¢ ${e(m.divisi || "-")}</span></div></div>`).join("") || `<div class="empty">Belum ada anggota online.</div>`}</div></section>`;
+  return `<section class="card"><div class="section-head"><div><h2>LIVE MEMBER</h2><p class="mini">Anggota yang aktif dalam 5 menit terakhir.</p></div><span class="status ACTIVE">${online.length} ONLINE</span></div><div class="live-grid">${online.map(m=>`<div class="live-member"><img src="${e(m.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName(m))}</b><span>${e(m.rank_detail || m.jabatan || "-")} • ${e(m.divisi || "-")}</span></div></div>`).join("") || `<div class="empty">Belum ada anggota online.</div>`}</div></section>`;
 }
 
 function leaderboardPage(){
@@ -1125,7 +1112,7 @@ function leaderboardPage(){
         </div>
 
         <div class="tabs">
-          <button class="${S.tab === "payroll" ? "active" : ""}" onclick="setTab('payroll')">PAYROLL</button>
+          <button class="${S.tab === "duty" ? "active" : ""}" onclick="setTab('duty')">SALDO GAJI</button>
           <button class="${S.tab === "activity" ? "active" : ""}" onclick="setTab('activity')">ACTIVITY BULAN INI</button>
           <button class="${S.tab === "totalActivity" ? "active" : ""}" onclick="setTab('totalActivity')">TOTAL ACTIVITY</button>
         </div>
@@ -1133,7 +1120,7 @@ function leaderboardPage(){
 
       ${S.tab === "activity" ? leaderboardTable("ACTIVITY POINT BULAN INI", activityRows, "activity") : ""}
       ${S.tab === "totalActivity" ? leaderboardTable("TOTAL ACTIVITY POINT", totalActivityRows, "totalActivity") : ""}
-      ${S.tab === "payroll" ? leaderboardTable("LEADERBOARD PAYROLL", salaryRows, "salary") : ""}
+      ${S.tab === "duty" ? leaderboardTable("SALDO GAJI", salaryRows, "salary") : ""}
     </main>${nav()}
   </main>`;
 }
@@ -1155,7 +1142,7 @@ function leaderboardTable(title, rows, mode){
       <tbody>
         ${rows.map((m,i) => {
           const progress = rankProgress(m);
-          const pointText = progress.unlimited ? `${Number(m.activity_points_month || 0)} / âˆž` : `${Number(m.activity_points_month || 0)} / ${progress.cap}`;
+          const pointText = progress.unlimited ? `${Number(m.activity_points_month || 0)} / ∞` : `${Number(m.activity_points_month || 0)} / ${progress.cap}`;
           return `<tr>
             <td><b>#${i+1}</b></td>
             <td>
@@ -1163,7 +1150,7 @@ function leaderboardTable(title, rows, mode){
                 <img src="${e(m.avatar_url || "/logo.png")}"/>
                 <div>
                   <b>${e(userDisplayName(m))}</b>
-                  <span>${e(m.badge_number || "NO BADGE")} â€¢ ${e(m.discord_username || "-")}</span>
+                  <span>${e(m.badge_number || "NO BADGE")} • ${e(m.discord_username || "-")}</span>
                 </div>
               </div>
             </td>
@@ -1407,7 +1394,7 @@ function attendanceTableBlock(title, cls, rows, desc){
           ? `Per absensi: <b>${money(Math.abs(delta))}</b><br><span class="mini">Tanggal: ${e(r.duty_start_date || String(r.created_at || "").slice(0,10) || "-")}</span>`
           : kind === "IZIN" ? `Potongan: <b>-${money(LEAVE_PAYROLL_DEDUCTION)}</b><br>Tanggal izin: <b>${e(r.leave_start_date || "-")}</b>` : `Potongan: <b>-${money(LEAVE_PAYROLL_DEDUCTION)}</b><br>Mulai: <b>${e(r.leave_start_date || "-")}</b><br>Selesai: <b>${e(r.leave_end_date || "-")}</b>`;
         return `<tr>
-          <td><b>${e(r.nama)}</b><br><span class="mini">${e(r.badge_number || "NO BADGE")} â€¢ ${e(r.divisi || "-")}</span></td>
+          <td><b>${e(r.nama)}</b><br><span class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.divisi || "-")}</span></td>
           <td><span class="type-pill ${e(String(r.type || "").toLowerCase())}">${e(r.type || "-")}</span></td>
           <td><span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span></td>
           <td><span class="mini">${detail}</span></td>
@@ -1513,9 +1500,6 @@ async function approveAttendance(id){
   const member = S.members.find(x => Number(x.id) === Number(row.user_id));
   const delta = attendancePayrollValue(member, kind);
   const nextPayroll = Math.max(0, Number(member?.pending_payroll || 0) + delta);
-  const nextAttendanceCount = Number(member?.attendance_count || 0) + (kind === "ABSENSI" ? 1 : 0);
-  const nextIzinCount = Number(member?.izin_count || 0) + (kind === "IZIN" ? 1 : 0);
-  const nextCutiCount = Number(member?.cuti_count || 0) + (kind === "CUTI" ? 1 : 0);
 
   const { error } = await supabase.from("attendance").update({
     status:"APPROVED",
@@ -1529,14 +1513,11 @@ async function approveAttendance(id){
   if(error) return alert(error.message);
 
   const prof = await supabase.from("profiles").update({
-    attendance_count: nextAttendanceCount,
-    izin_count: nextIzinCount,
-    cuti_count: nextCutiCount,
     pending_payroll: nextPayroll
   }).eq("id", row.user_id);
   if(prof.error) return alert(prof.error.message);
 
-  await audit("APPROVE_ATTENDANCE_PAYROLL", "attendance", id, { note, row, kind, delta, nextPayroll, nextAttendanceCount, nextIzinCount, nextCutiCount });
+  await audit("APPROVE_ATTENDANCE_PAYROLL", "attendance", id, { note, row, kind, delta, nextPayroll });
   await botEvent("ATTENDANCE_APPROVED", {
     id,
     nama: row?.nama,
@@ -1573,19 +1554,11 @@ async function deleteAttendance(id){
     const member = S.members.find(x => Number(x.id) === Number(row.user_id));
     const currentDelta = Number(row.payroll_value || attendancePayrollValue(member, kind));
     const nextPayroll = Math.max(0, Number(member?.pending_payroll || 0) - currentDelta);
-    const nextAttendanceCount = Math.max(0, Number(member?.attendance_count || 0) - (kind === "ABSENSI" ? 1 : 0));
-    const nextIzinCount = Math.max(0, Number(member?.izin_count || 0) - (kind === "IZIN" ? 1 : 0));
-    const nextCutiCount = Math.max(0, Number(member?.cuti_count || 0) - (kind === "CUTI" ? 1 : 0));
 
-    const prof = await supabase.from("profiles").update({
-      attendance_count: nextAttendanceCount,
-      izin_count: nextIzinCount,
-      cuti_count: nextCutiCount,
-      pending_payroll: nextPayroll
-    }).eq("id", row.user_id);
+    const prof = await supabase.from("profiles").update({ pending_payroll: nextPayroll }).eq("id", row.user_id);
     if(prof.error) throw prof.error;
 
-    await audit("DELETE_APPROVED_ATTENDANCE", "attendance", id, { row, deleted_by:userDisplayName(), reason, reversed_delta: currentDelta, nextPayroll, nextAttendanceCount, nextIzinCount, nextCutiCount });
+    await audit("DELETE_APPROVED_ATTENDANCE", "attendance", id, { row, deleted_by:userDisplayName(), reason, reversed_delta: currentDelta, nextPayroll });
     await botEvent("ATTENDANCE_DELETED", { id, nama: row.nama, divisi: row.divisi, badge_number: row.badge_number, type: row.type, deleted_by:userDisplayName(), reason, reversed_delta: currentDelta });
 
     const { error } = await supabase.from("attendance").delete().eq("id", id);
@@ -1745,8 +1718,8 @@ function reportItem(r){
 
   return `<div class="list-item">
     <h3>${e(reportTypeLabel(r.type))} - ${e(r.nama)}</h3>
-    <div class="mini">${fmt(r.created_at)} â€¢ <span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span> â€¢ ${reportPointValue(r.type)} activity point</div>
-    <div class="mini">${e(r.badge_number || "NO BADGE")} â€¢ ${e(r.rank_detail || "-")} â€¢ ${e(r.divisi || "-")}</div>
+    <div class="mini">${fmt(r.created_at)} • <span class="status ${e(r.status)}">${e(statusLabel(r.status))}</span> • ${reportPointValue(r.type)} activity point</div>
+    <div class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.rank_detail || "-")} • ${e(r.divisi || "-")}</div>
 
     ${isPatrol ? `
       <p><b>Tanggal/Jam:</b> ${e(payload.report_date || "-")} ${e(payload.report_time || "")}</p>
@@ -1758,7 +1731,7 @@ function reportItem(r){
       <p><b>Tanggal:</b> ${e(payload.report_date || "-")}</p>
       <p><b>Kronologi:</b> ${e(payload.chronology || "-")}</p>
       <p><b>Kendaraan:</b> ${e(payload.subject_info || "-")}</p>
-      <p><b>Pasal:</b> ${e(payload.law || "-")} â€¢ <b>Masa Sita:</b> ${e(payload.duration || "-")} â€¢ <b>Denda:</b> ${e(payload.fine || "-")}</p>
+      <p><b>Pasal:</b> ${e(payload.law || "-")} • <b>Masa Sita:</b> ${e(payload.duration || "-")} • <b>Denda:</b> ${e(payload.fine || "-")}</p>
       ${isSeizure ? `<p><b>Plate:</b> ${e(payload.plate || "-")}</p>` : ""}
     `}
 
@@ -2134,9 +2107,9 @@ function memberMini(m, showActions=false){
       ${e(m.display_name)}
       <span class="status ${e(statusLabel(m.status))}">${e(statusLabel(m.status))}</span>
     </h3>
-    <div class="mini">${e(m.badge_number || "NO BADGE")} â€¢ ${e(m.jabatan || "-")} â€¢ ${e(m.divisi || "-")}</div>
-    <div class="mini">Last login: ${fmt(m.last_login)} â€¢ Last seen: ${fmt(m.last_seen)}</div>
-    <div class="mini">Absensi bulan ini: ${monthTotal} â€¢ Riwayat SP: ${spTotal} â€¢ Activity: ${Number(m.activity_points_month || 0)}/${activityCapFor(m)}</div>
+    <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan || "-")} • ${e(m.divisi || "-")}</div>
+    <div class="mini">Last login: ${fmt(m.last_login)} • Last seen: ${fmt(m.last_seen)}</div>
+    <div class="mini">Absensi bulan ini: ${monthTotal} • Riwayat SP: ${spTotal} • Activity: ${Number(m.activity_points_month || 0)}/${activityCapFor(m)}</div>
     ${showActions ? `<button class="btn small" onclick="openMemberDetail(${m.id})">DETAIL RIWAYAT</button>` : ""}
     ${admin() && showActions ? `<button class="btn small yellow" onclick="openMemberEditor(${m.id})">EDIT USERNAME / BADGE / JABATAN</button>` : ""}
   </div>`;
@@ -2161,21 +2134,21 @@ function openMemberDetail(id){
       <img src="${e(m.avatar_url || "/logo.png")}"/>
       <div>
         <h2>${e(m.display_name)}</h2>
-        <p class="mini">${e(m.badge_number || "NO BADGE")} â€¢ ${e(m.jabatan)} â€¢ ${e(m.divisi)}</p>
+        <p class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan)} • ${e(m.divisi)}</p>
       </div>
     </div>
 
     <h3>Riwayat Jabatan</h3>
-    ${roles.map(x=>`<div class="mini">â€¢ ${fmt(x.created_at)}: ${e(x.old_jabatan || "-")} â†’ ${e(x.new_jabatan || "-")} oleh ${e(x.changed_by || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+    ${roles.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.old_jabatan || "-")} → ${e(x.new_jabatan || "-")} oleh ${e(x.changed_by || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
 
     <h3>Riwayat Mutasi Divisi</h3>
-    ${divs.map(x=>`<div class="mini">â€¢ ${fmt(x.created_at)}: ${e(x.old_divisi || "-")} â†’ ${e(x.new_divisi || "-")} oleh ${e(x.changed_by || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+    ${divs.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.old_divisi || "-")} → ${e(x.new_divisi || "-")} oleh ${e(x.changed_by || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
 
     <h3>Riwayat SP</h3>
-    ${sps.map(x=>`<div class="mini">â€¢ ${fmt(x.created_at)}: ${x.sp_level==99?"PTDH":"SP"+x.sp_level} - ${e(x.reason)} oleh ${e(x.issued_by)}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+    ${sps.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${x.sp_level==99?"PTDH":"SP"+x.sp_level} - ${e(x.reason)} oleh ${e(x.issued_by)}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
 
     <h3>Absensi Terakhir</h3>
-    ${abs.map(x=>`<div class="mini">â€¢ ${fmt(x.created_at)}: ${e(x.type)} / ${e(statusLabel(x.status))} - ${e(x.note || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
+    ${abs.map(x=>`<div class="mini">• ${fmt(x.created_at)}: ${e(x.type)} / ${e(statusLabel(x.status))} - ${e(x.note || "-")}</div>`).join("") || `<div class="mini">Belum ada.</div>`}
 
     <button class="btn red" onclick="closeModal()">TUTUP</button>
   </section>`;
@@ -2191,7 +2164,7 @@ function propamPage(){
     <main class="page">
       <section class="card dark">
         <h2>SP / PTDH</h2>
-        <p class="notice">SP1 â†’ SP2 â†’ SP3 â†’ PTDH. SP bisa dihapus oleh BIDPROPAM/PATI/SUPER ADMIN.</p>
+        <p class="notice">SP1 → SP2 → SP3 → PTDH. SP bisa dihapus oleh BIDPROPAM/PATI/SUPER ADMIN.</p>
       </section>
 
       <section class="card">
@@ -2343,7 +2316,7 @@ function payrollPage(){
   const stats = payrollStatsForMember(p, period);
   const payroll = Number(p.pending_payroll || 0);
   return `<main class="app">${top("FINANCIAL GATEWAY")}<main class="page">
-    <section class="card blue"><span class="badge">PAYROLL SYSTEM</span><h2 class="big-title">GAJI</h2><p>${e(userDisplayName(p))} â€¢ ${e(p.badge_number || "NO BADGE")}</p>
+    <section class="card blue"><span class="badge">PAYROLL SYSTEM</span><h2 class="big-title">GAJI</h2><p>${e(userDisplayName(p))} • ${e(p.badge_number || "NO BADGE")}</p>
       <div class="payroll-summary"><div><small>ABSENSI ACC</small><b>${stats.hadir}</b></div><div><small>IZIN/CUTI</small><b>${stats.izin + stats.cuti}</b></div><div><small>SALDO GAJI</small><b>${money(payroll)}</b></div></div>
     </section>
 
@@ -2367,7 +2340,7 @@ function payrollPage(){
 
     ${payrollResearchPanel()}
 
-    ${high() ? `<section class="card yellow"><h2>PENDING PAYROLL</h2>${S.payrolls.filter(x => x.status === "PENDING").map(p => `<div class="list-item"><h3>${e(p.nama)} - ${money(p.requested_amount || p.amount || 0)}</h3><div class="mini">${e(p.period || "-")} â€¢ Hadir ${Number(p.attendance_count || 0)} â€¢ Izin ${Number(p.izin_count || 0)} â€¢ Cuti ${Number(p.cuti_count || 0)}</div><div class="split-actions"><button class="btn small green" onclick="approvePayroll(${p.id})">BAYAR</button><button class="btn small red" onclick="rejectPayroll(${p.id})">TOLAK</button></div></div>`).join("") || "<p>Tidak ada pending.</p>"}</section>` : ""}
+    ${high() ? `<section class="card yellow"><h2>PENDING PAYROLL</h2>${S.payrolls.filter(x => x.status === "PENDING").map(p => `<div class="list-item"><h3>${e(p.nama)} - ${money(p.requested_amount || p.amount || 0)}</h3><div class="mini">${e(p.period || "-")} • Hadir ${Number(p.attendance_count || 0)} • Izin ${Number(p.izin_count || 0)} • Cuti ${Number(p.cuti_count || 0)}</div><div class="split-actions"><button class="btn small green" onclick="approvePayroll(${p.id})">BAYAR</button><button class="btn small red" onclick="rejectPayroll(${p.id})">TOLAK</button></div></div>`).join("") || "<p>Tidak ada pending.</p>"}</section>` : ""}
   </main>${nav()}</main>`;
 }
 
@@ -2375,7 +2348,6 @@ async function submitPayroll(){
   const amount = Number(S.profile.pending_payroll || 0);
   if(amount <= 0) return alert("Belum ada saldo gaji yang bisa diajukan.");
   const stats = payrollStatsForMember(S.profile, monthKey());
-  const counters = memberPayrollCounters(S.profile);
   const { error } = await supabase.from("payrolls").insert({
     user_id: S.profile.id,
     nama: userDisplayName(S.profile),
@@ -2385,16 +2357,16 @@ async function submitPayroll(){
     requested_minutes: 0,
     requested_amount: amount,
     approved_amount: 0,
-    attendance_count: counters.attendance,
-    izin_count: counters.izin,
-    cuti_count: counters.cuti,
+    attendance_count: stats.hadir,
+    izin_count: stats.izin,
+    cuti_count: stats.cuti,
     deduction_amount: stats.deduction,
     salary_rate: stats.rate,
     note: document.querySelector("#pay_note").value,
     status: "PENDING"
   });
   if(error) return alert(error.message);
-  await audit("CREATE_PAYROLL", "payrolls", "", { amount, stats, counters });
+  await audit("CREATE_PAYROLL", "payrolls", "", { amount, stats });
   await loadAll();
   toast("Pengajuan payroll terkirim.", "success");
   render();
@@ -2408,15 +2380,12 @@ async function approvePayroll(id){
   if(pay.error) return alert(pay.error.message);
   const member = S.members.find(x => Number(x.id) === Number(row.user_id));
   const prof = await supabase.from("profiles").update({
-    attendance_count: 0,
-    izin_count: 0,
-    cuti_count: 0,
     pending_payroll: 0,
     total_payroll_received: Number(member?.total_payroll_received || 0) + amount
   }).eq("id", row.user_id);
   if(prof.error) return alert(prof.error.message);
   await audit("APPROVE_PAYROLL", "payrolls", id, { row, amount });
-  await botEvent("PAYROLL_APPROVED", { id, nama: row.nama, requested_amount: amount, approved_by: S.profile.display_name });
+  await botEvent("PAYROLL_PAID", { id, nama: row.nama, requested_amount: amount, approved_by: S.profile.display_name });
   await loadAll();
   toast("Payroll dibayar dan saldo gaji anggota direset.", "success");
   render();
@@ -2511,7 +2480,7 @@ function auditLog(){
     <h2>AUDIT LENGKAP</h2>
     ${S.audit.map(a => `<div class="list-item">
       <h3>${e(a.action)}</h3>
-      <div class="mini">${e(a.actor_name)} â€¢ ${fmt(a.created_at)}</div>
+      <div class="mini">${e(a.actor_name)} • ${fmt(a.created_at)}</div>
       <pre class="audit-pre">${e(JSON.stringify(a.metadata || {}, null, 2))}</pre>
     </div>`).join("") || `<div class="empty">Belum ada audit.</div>`}
   </section>`;
@@ -2615,8 +2584,8 @@ function promotionAdminPanel(){
       <span class="status PENDING">${rows.length} PENDING</span>
     </div>
     ${rows.map(r => `<div class="list-item">
-      <h3>${e(r.nama)} - ${e(r.current_rank)} â†’ ${e(r.target_rank)}</h3>
-      <div class="mini">${e(r.badge_number || "NO BADGE")} â€¢ ${e(r.divisi || "-")} â€¢ ${Number(r.activity_points || 0)}/${Number(r.required_points || 0)} point</div>
+      <h3>${e(r.nama)} - ${e(r.current_rank)} → ${e(r.target_rank)}</h3>
+      <div class="mini">${e(r.badge_number || "NO BADGE")} • ${e(r.divisi || "-")} • ${Number(r.activity_points || 0)}/${Number(r.required_points || 0)} point</div>
       <p>${e(r.note || "-")}</p>
       <div class="split-actions">
         <button class="btn small green" onclick="approvePromotionRequest(${r.id})">ACC</button>
@@ -2763,12 +2732,12 @@ function adminPage(){
 
 function adminHome(){
   return `<section class="grid">
-    <button class="tile" onclick="setTab('pending')"><div class="icon">âœ…</div>ACC USER<small>${S.members.filter(m => m.status === "PENDING").length} pending</small></button>
-    <button class="tile" onclick="setTab('members')"><div class="icon">ðŸŽ–ï¸</div>SET ANGGOTA<small>Username / badge / jabatan</small></button>
-    <button class="tile" onclick="setTab('attendance')"><div class="icon">ðŸ“‹</div>ACC ABSENSI<small>${S.attendance.filter(a => a.status === "PENDING").length} pending</small></button>
-    <button class="tile" onclick="setTab('badge')"><div class="icon">#ï¸âƒ£</div>BADGE GEN<small>Auto number</small></button>
-    <button class="tile" onclick="go('propam')"><div class="icon">âš–ï¸</div>PROPAM<small>SP / PTDH</small></button>
-    <button class="tile" onclick="go('members')"><div class="icon">ðŸ”</div>SEARCH<small>Anggota realtime</small></button>
+    <button class="tile" onclick="setTab('pending')"><div class="icon">✅</div>ACC USER<small>${S.members.filter(m => m.status === "PENDING").length} pending</small></button>
+    <button class="tile" onclick="setTab('members')"><div class="icon">🎖️</div>SET ANGGOTA<small>Username / badge / jabatan</small></button>
+    <button class="tile" onclick="setTab('attendance')"><div class="icon">📋</div>ACC ABSENSI<small>${S.attendance.filter(a => a.status === "PENDING").length} pending</small></button>
+    <button class="tile" onclick="setTab('badge')"><div class="icon">#️⃣</div>BADGE GEN<small>Auto number</small></button>
+    <button class="tile" onclick="go('propam')"><div class="icon">⚖️</div>PROPAM<small>SP / PTDH</small></button>
+    <button class="tile" onclick="go('members')"><div class="icon">🔍</div>SEARCH<small>Anggota realtime</small></button>
   </section>`;
 }
 
@@ -2794,7 +2763,7 @@ function adminMembers(){
     <input value="${e(S.search)}" oninput="setSearch(this.value)" placeholder="Cari anggota..."/>
     ${rows.map(m => `<div class="list-item">
       <h3><span class="online-dot ${isOnline(m) ? "on" : "off"}"></span>${e(m.display_name)} <span class="status ${e(statusLabel(m.status))}">${e(statusLabel(m.status))}</span></h3>
-      <div class="mini">${e(m.badge_number || "NO BADGE")} â€¢ ${e(m.jabatan)} â€¢ ${e(m.divisi)}</div>
+      <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan)} • ${e(m.divisi)}</div>
       <button class="btn small" onclick="openMemberDetail(${m.id})">DETAIL</button>
       <button class="btn small yellow" onclick="openMemberEditor(${m.id})">EDIT</button>
       ${canDeleteMember() ? `<button class="btn small red" onclick="deleteMember(${m.id})">HAPUS</button>` : ""}
@@ -3171,4 +3140,3 @@ document.addEventListener("change", e => {
     S.formDirty = true;
   }
 });
-
