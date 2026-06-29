@@ -263,6 +263,35 @@ function rowButtons(type, id) {
   ];
 }
 
+function normalizeRank(rank) {
+  const r = String(rank || "").trim();
+  if (["Bharada", "Bharatu", "Bharaka", "BHARADA", "BHARATU", "BHARAKA", "Tamtama"].includes(r)) return "TAMTAMA";
+  return r;
+}
+
+function normalizeDivisi(divisi) {
+  const d = String(divisi || "").trim();
+  if (d.toUpperCase() === "CASIS" || d.toUpperCase() === "NON DEVISI") return "NON DIVISI";
+  return d || "NON DIVISI";
+}
+
+async function profileNameById(id) {
+  const { data } = await supabase
+    .from("profiles")
+    .select("display_name, discord_nickname, server_nickname, discord_username")
+    .eq("id", Number(id))
+    .maybeSingle();
+  return data?.server_nickname || data?.discord_nickname || data?.display_name || data?.discord_username || String(id);
+}
+
+async function colleagueNames(ids = []) {
+  const arr = Array.isArray(ids) ? ids : [];
+  if (!arr.length) return "-";
+  const names = [];
+  for (const id of arr) names.push(await profileNameById(id));
+  return names.join(", ");
+}
+
 function evidenceText(row) {
   const urls = [];
 
@@ -288,16 +317,91 @@ function watchAttendance() {
       async p => {
         const r = p.new;
         const kind = String(r.type || "ABSENSI").toUpperCase();
-        const key = kind === "ABSENSI" ? "log_absensi" : "log_izin_cuti";
+
+        if (kind === "ABSENSI") {
+          const embed = new EmbedBuilder()
+            .setTitle("📋 ABSENSI ANGGOTA")
+            .setColor(0x22c55e)
+            .addFields(
+              { name: "Nama", value: r.nama || "-", inline: true },
+              { name: "Badge", value: r.badge_number || "NO BADGE", inline: true },
+              { name: "Jabatan", value: r.jabatan || "-", inline: true },
+              { name: "Divisi", value: normalizeDivisi(r.divisi), inline: true },
+              { name: "Lokasi", value: r.location || "-", inline: true },
+              { name: "Keterangan", value: r.note || "-", inline: false },
+              { name: "Bukti", value: evidenceText(r), inline: false },
+              { name: "Catatan", value: "ACC / TOLAK hanya lewat Website MDT.", inline: false }
+            )
+            .setFooter({ text: `Record ID: ${r.id}` })
+            .setTimestamp();
+
+          if (r.evidence_url) embed.setImage(r.evidence_url);
+
+          const msg = await sendTo("log_absensi", embed, []);
+          if (!msg) return;
+
+          await supabase
+            .from("attendance")
+            .update({ discord_message_id: msg.id })
+            .eq("id", r.id);
+
+          return;
+        }
+
+        if (kind === "IZIN" || kind === "CUTI") {
+          const mentionRole = "<@&1491453968138895431>";
+          const tanggalMulai = r.leave_start_date || "-";
+          const tanggalAkhir = r.leave_end_date || r.leave_start_date || "-";
+
+          const embed = new EmbedBuilder()
+            .setColor(0xfbbf24)
+            .setDescription(
+`${mentionRole}
+
+**SURAT PERMOHONAN IZIN KEPOLISIAN MAYDAY**
+\`\`\`
+Dengan hormat bapak JENDRAL/KOMJEN.
+
+Dengan ini saya : ${kind}
+
+Nama      : ${r.nama || "-"}
+Pangkat  : ${normalizeRank(r.rank_detail || r.jabatan || "-")}
+Satuan   : ${normalizeDivisi(r.divisi || "-")}
+Alasan   : ${r.note || "-"}
+
+Tanggal Izin      : ${tanggalMulai}
+Tanggal berakhir  : ${tanggalAkhir}
+
+Demikian surat permohonan izin ini kami sampaikan agar para petinggi dapat memaklumkan dan saya ucapkan terimakasih.
+\`\`\``)
+            .addFields(
+              { name: "Bukti", value: evidenceText(r), inline: false },
+              { name: "Catatan", value: "ACC / TOLAK hanya lewat Website MDT.", inline: false }
+            )
+            .setFooter({ text: `Record ID: ${r.id}` })
+            .setTimestamp();
+
+          if (r.evidence_url) embed.setImage(r.evidence_url);
+
+          const msg = await sendTo("log_izin_cuti", embed, []);
+          if (!msg) return;
+
+          await supabase
+            .from("attendance")
+            .update({ discord_message_id: msg.id })
+            .eq("id", r.id);
+
+          return;
+        }
 
         const embed = new EmbedBuilder()
-          .setTitle(kind === "ABSENSI" ? "ABSENSI ANGGOTA" : `PENGAJUAN ${kind}`)
+          .setTitle(`PENGAJUAN ${kind}`)
           .setColor(0x22c55e)
           .addFields(
             { name: "Nama", value: r.nama || "-", inline: true },
             { name: "Badge", value: r.badge_number || "NO BADGE", inline: true },
             { name: "Jabatan", value: r.jabatan || "-", inline: true },
-            { name: "Divisi", value: r.divisi || "-", inline: true },
+            { name: "Divisi", value: normalizeDivisi(r.divisi), inline: true },
             { name: "Status", value: r.type || "-", inline: true },
             { name: "Lokasi", value: r.location || "-", inline: true },
             { name: "Keterangan", value: r.note || "-", inline: false },
@@ -309,7 +413,7 @@ function watchAttendance() {
 
         if (r.evidence_url) embed.setImage(r.evidence_url);
 
-        const msg = await sendTo(key, embed, []);
+        const msg = await sendTo("log_izin_cuti", embed, []);
         if (!msg) return;
 
         await supabase
@@ -331,9 +435,10 @@ function reportTypeLabel(type) {
   return map[type] || type || "LAPORAN";
 }
 
-function reportTextBlock(row) {
+async function reportTextBlock(row) {
   const p = row.payload || {};
   const type = row.type;
+  const rekan = await colleagueNames(p.colleagues || []);
 
   if (type === "KRIMINAL") {
     return `LAPORAN PENANGKAPAN
@@ -351,17 +456,10 @@ II. Informasi Tersangka:
 
 III. Identitas Petugas yang Menahan.
 - Nama Petugas               : ${row.nama || "-"}
-- Divisi                     : ${row.divisi || "-"}
-- Pangkat                    : ${row.rank_detail || "-"}
+- Divisi                     : ${normalizeDivisi(row.divisi) || "-"}
+- Pangkat                    : ${normalizeRank(row.rank_detail) || "-"}
 - Jabatan                    : ${row.jabatan || "-"}
-- Rekan                      : ${
-Array.isArray(p.colleagues) && p.colleagues.length
-? p.colleagues.map(id => {
-    const m = S.members.find(x => Number(x.id) === Number(id));
-    return m ? (m.discord_nickname || m.display_name) : id;
-  }).join(", ")
-: "-"
-}
+- Rekan                      : ${rekan}
 - Jenis Barang Bukti         : ${p.evidence_type || "-"}
 
 Note: Bukti KTP & Barang Bukti wajib diunggah melalui tombol lampiran media di bawah.`;
@@ -377,9 +475,10 @@ I. Informasi Patroli.
 
 II. Identitas Petugas.
 - Nama Petugas               : ${row.nama || "-"}
-- Divisi                     : ${row.divisi || "-"}
-- Pangkat                    : ${row.rank_detail || "-"}
+- Divisi                     : ${normalizeDivisi(row.divisi) || "-"}
+- Pangkat                    : ${normalizeRank(row.rank_detail) || "-"}
 - Jabatan                    : ${row.jabatan || "-"}
+- Rekan                      : ${rekan}
 
 III. Laporan Singkat.
 ${p.chronology || p.report || "-"}
@@ -402,16 +501,17 @@ II. Informasi Kendaraan.
 
 III. Identitas Petugas.
 - Nama Petugas               : ${row.nama || "-"}
-- Divisi                     : ${row.divisi || "-"}
-- Pangkat                    : ${row.rank_detail || "-"}
+- Divisi                     : ${normalizeDivisi(row.divisi) || "-"}
+- Pangkat                    : ${normalizeRank(row.rank_detail) || "-"}
 - Jabatan                    : ${row.jabatan || "-"}
+- Rekan                      : ${rekan}
 
 Note: Bukti kendaraan wajib diunggah melalui tombol lampiran media di bawah.`;
 }
 
-function reportDescription(row) {
+async function reportDescription(row) {
   const title = `📁 **ARSIP LAPORAN BARU DITERIMA - KATEGORI: ${reportTypeLabel(row.type)}**`;
-  const body = reportTextBlock(row);
+  const body = await reportTextBlock(row);
   return `${title}\n\`\`\`text\n${body}\n\`\`\``;
 }
 
@@ -426,7 +526,7 @@ function watchReports() {
         const key = reportLogKey(r.type);
 
         const embed = new EmbedBuilder()
-          .setDescription(reportDescription(r))
+          .setDescription(await reportDescription(r))
           .setColor(0x2f313f)
           .addFields(
             { name: "Bukti", value: evidenceText(r), inline: false },
@@ -489,12 +589,15 @@ function watchPayroll() {
         const embed = new EmbedBuilder()
           .setTitle("💵 PENGAJUAN PAYROLL")
           .setColor(0xffd400)
-          .addFields(
-            { name: "Nama", value: r.nama || "-", inline: true },
-            { name: "Periode", value: r.period || "-", inline: true },
-            { name: "Nominal", value: String(r.amount || 0), inline: true },
-            { name: "Keterangan", value: r.note || "-", inline: false }
-          )
+            .addFields(
+              { name: "Nama", value: r.nama || "-", inline: true },
+              { name: "Periode", value: r.period || "-", inline: true },
+              { name: "Nominal", value: String(r.requested_amount || r.amount || 0), inline: true },
+              { name: "Absensi ACC", value: String(r.attendance_count || 0), inline: true },
+              { name: "Izin", value: String(r.izin_count || 0), inline: true },
+              { name: "Cuti", value: String(r.cuti_count || 0), inline: true },
+              { name: "Keterangan", value: r.note || "-", inline: false }
+            )
           .setFooter({ text: `Record ID: ${r.id}` })
           .setTimestamp();
 
@@ -555,194 +658,122 @@ function watchBotEvents() {
         const payload = ev.payload || {};
 
         if (ev.event_type === "SYNC_DISCORD_PROFILE") {
-          const discordId = payload.discord_id;
+          const discordId = String(payload.discord_id || "").trim();
           const profileId = payload.profile_id;
 
           try {
+            if (!discordId) throw new Error("discord_id kosong.");
+            if (!profileId) throw new Error("profile_id kosong.");
+
             const guild = await client.guilds.fetch(process.env.DISCORD_GUILD_ID);
             const member = await guild.members.fetch(discordId);
 
-            const avatarUrl = member.displayAvatarURL({ extension: "png", size: 256 });
+            const avatarUrl = member.displayAvatarURL({ extension: "png", size: 256, forceStatic: false });
+            const serverName = member.displayName || member.nickname || member.user.globalName || member.user.username;
+            const nickName = member.nickname || member.displayName || member.user.globalName || member.user.username;
 
-            await supabase
+            const { data: updated, error: updateError } = await supabase
               .from("profiles")
               .update({
-                display_name: member.displayName || member.user.username,
+                display_name: serverName,
                 discord_username: member.user.username,
-				server_nickname: member.displayName || member.user.username,
-                discord_nickname: member.nickname || member.displayName || member.user.username,
+                server_nickname: serverName,
+                discord_nickname: nickName,
                 avatar_url: avatarUrl,
                 discord_last_sync: new Date().toISOString()
               })
-              .eq("id", profileId);
+              .eq("id", profileId)
+              .select("id, display_name, server_nickname, discord_nickname, discord_username, avatar_url")
+              .maybeSingle();
 
-            await createAuditLog(
-              "BOT",
-              "SYNC_DISCORD_PROFILE",
-              "profiles",
-              profileId,
-              {
-                discord_id: discordId,
-                username: member.user.username,
-                nickname: member.nickname || "",
-                display_name: member.displayName || ""
-              }
-            );
+            if (updateError) throw updateError;
+            if (!updated) throw new Error(`Profile ID ${profileId} tidak ditemukan / tidak terupdate.`);
+
+            await createAuditLog("BOT", "SYNC_DISCORD_PROFILE", "profiles", profileId, {
+              discord_id: discordId,
+              username: member.user.username,
+              server_nickname: serverName,
+              discord_nickname: nickName,
+              avatar_url: avatarUrl
+            });
 
             await sendTo(
-              "audit_log",
+              "log_audit",
               new EmbedBuilder()
                 .setTitle("🔄 DISCORD PROFILE SYNC")
                 .setColor(0x2563eb)
+                .setDescription("Profil Discord berhasil disinkronkan ke Website Mayday MDT.")
                 .addFields(
                   { name: "Profile ID", value: String(profileId || "-"), inline: true },
                   { name: "Discord", value: member.user.tag || member.user.username, inline: true },
-                  { name: "Nickname Server", value: member.displayName || "-", inline: true }
+                  { name: "Nickname Server", value: serverName || "-", inline: true },
+                  { name: "Username", value: member.user.username || "-", inline: true }
                 )
                 .setThumbnail(avatarUrl)
                 .setTimestamp(),
               []
             );
 
-            await supabase
-              .from("bot_events")
-              .update({
-                status: "DONE",
-                processed_at: new Date().toISOString()
-              })
-              .eq("id", ev.id);
-
+            await supabase.from("bot_events").update({ status: "DONE", processed_at: new Date().toISOString(), error_message: null }).eq("id", ev.id);
             return;
           } catch (err) {
             console.log("SYNC_DISCORD_PROFILE error:", err.message);
 
-            await supabase
-              .from("bot_events")
-              .update({
-                status: "ERROR",
-                processed_at: new Date().toISOString(),
-                error_message: err.message
-              })
-              .eq("id", ev.id);
+            await sendTo(
+              "log_audit",
+              new EmbedBuilder()
+                .setTitle("❌ DISCORD PROFILE SYNC GAGAL")
+                .setColor(0xef4444)
+                .addFields(
+                  { name: "Profile ID", value: String(profileId || "-"), inline: true },
+                  { name: "Discord ID", value: String(discordId || "-"), inline: true },
+                  { name: "Error", value: String(err.message || "-"), inline: false }
+                )
+                .setTimestamp(),
+              []
+            );
 
+            await supabase.from("bot_events").update({ status: "ERROR", processed_at: new Date().toISOString(), error_message: err.message }).eq("id", ev.id);
             return;
           }
         }
 
-
-
         let title = "📡 MAYDAY MDT EVENT";
         let color = 0x2563eb;
-        let targetKey = "log_audit";
+        const targetKey = "log_audit";
 
-        if (ev.event_type === "ATTENDANCE_APPROVED") {
-          const kind = String(payload.type || "ABSENSI").toUpperCase();
-          title = kind === "ABSENSI" ? "✅ ABSENSI DI-ACC" : `✅ ${kind} DI-ACC`;
-          color = 0x22c55e;
-          targetKey = kind === "ABSENSI" ? "log_absensi" : "log_izin_cuti";
-        }
-
-        if (ev.event_type === "ATTENDANCE_REJECTED") {
-          const kind = String(payload.type || "ABSENSI").toUpperCase();
-          title = kind === "ABSENSI" ? "❌ ABSENSI DITOLAK" : `❌ ${kind} DITOLAK`;
-          color = 0xef4444;
-          targetKey = kind === "ABSENSI" ? "log_absensi" : "log_izin_cuti";
-        }
-
-        if (ev.event_type === "MEMBER_DELETED") {
-          title = "🗑️ ANGGOTA DIHAPUS";
-          color = 0xef4444;
-          targetKey = "log_audit";
-        }
-
-        if (ev.event_type === "SP_DELETED") {
-          title = "🗑️ SP / PTDH DIHAPUS";
-          color = 0xf97316;
-          targetKey = "log_propam";
-        }
-
-        if (ev.event_type === "USER_APPROVED") {
-          title = "✅ USER DI-ACC";
-          color = 0x22c55e;
-          targetKey = "log_verifikasi_user";
-        }
-
-        if (ev.event_type === "USER_REJECTED") {
-          title = "❌ USER DITOLAK";
-          color = 0xef4444;
-          targetKey = "log_verifikasi_user";
-        }
-
-        if (ev.event_type === "REPORT_APPROVED") {
-          title = "✅ LAPORAN DI-ACC";
-          color = 0x22c55e;
-          targetKey = "log_penangkapan";
-        }
-
-        if (ev.event_type === "REPORT_REJECTED") {
-          title = "❌ LAPORAN DITOLAK";
-          color = 0xef4444;
-          targetKey = "log_penangkapan";
-        }
-
-        if (ev.event_type === "REPORT_ARCHIVED") {
-          title = "📁 LAPORAN DIARSIPKAN";
-          color = 0x2563eb;
-          targetKey = "log_penangkapan";
-        }
-
-        if (ev.event_type === "REPORT_MONTH_ARCHIVED") {
-          title = "📁 ARSIP LAPORAN BULANAN";
-          color = 0x2563eb;
-          targetKey = "log_penangkapan";
-        }
-
-        if (ev.event_type === "REPORT_MONTH_DELETED") {
-          title = "ARSIP BULANAN DIHAPUS";
-          color = 0xef4444;
-          targetKey = "log_audit";
-        }
+        if (ev.event_type === "ATTENDANCE_APPROVED") { const kind = String(payload.type || "ABSENSI").toUpperCase(); title = kind === "ABSENSI" ? "✅ ABSENSI DI-ACC" : `✅ ${kind} DI-ACC`; color = 0x22c55e; }
+        if (ev.event_type === "ATTENDANCE_REJECTED") { const kind = String(payload.type || "ABSENSI").toUpperCase(); title = kind === "ABSENSI" ? "❌ ABSENSI DITOLAK" : `❌ ${kind} DITOLAK`; color = 0xef4444; }
+        if (ev.event_type === "MEMBER_DELETED") { title = "🗑️ ANGGOTA DIHAPUS"; color = 0xef4444; }
+        if (ev.event_type === "SP_DELETED") { title = "🗑️ SP / PTDH DIHAPUS"; color = 0xf97316; }
+        if (ev.event_type === "USER_APPROVED") { title = "✅ USER DI-ACC"; color = 0x22c55e; }
+        if (ev.event_type === "USER_REJECTED") { title = "❌ USER DITOLAK"; color = 0xef4444; }
+        if (ev.event_type === "REPORT_APPROVED") { title = "✅ LAPORAN DI-ACC"; color = 0x22c55e; }
+        if (ev.event_type === "REPORT_REJECTED") { title = "❌ LAPORAN DITOLAK"; color = 0xef4444; }
+        if (ev.event_type === "REPORT_ARCHIVED") { title = "📁 LAPORAN DIARSIPKAN"; color = 0x2563eb; }
+        if (ev.event_type === "REPORT_MONTH_ARCHIVED") { title = "📁 ARSIP LAPORAN BULANAN"; color = 0x2563eb; }
+        if (ev.event_type === "REPORT_MONTH_DELETED") { title = "🗑️ ARSIP BULANAN DIHAPUS"; color = 0xef4444; }
+        if (ev.event_type === "PAYROLL_APPROVED") { title = "✅ PAYROLL DI-ACC"; color = 0x22c55e; }
+        if (ev.event_type === "PAYROLL_REJECTED") { title = "❌ PAYROLL DITOLAK"; color = 0xef4444; }
+        if (ev.event_type === "PROMOTION_APPROVED") { title = "✅ KENAIKAN PANGKAT DI-ACC"; color = 0x22c55e; }
+        if (ev.event_type === "PROMOTION_REJECTED") { title = "❌ KENAIKAN PANGKAT DITOLAK"; color = 0xef4444; }
 
         const embed = new EmbedBuilder()
           .setTitle(title)
           .setColor(color)
           .setDescription("Update dari Website Mayday MDT")
           .addFields(
-            { name: "Record ID", value: String(payload.id || ev.id || "-"), inline: true },
-            { name: "Nama", value: String(payload.nama || payload.row?.target_name || "-"), inline: true },
-            { name: "Divisi", value: String(payload.divisi || "-"), inline: true },
-            { name: "Jenis", value: String(payload.type || "-"), inline: true },
-            {
-              name: "Diproses oleh",
-              value: String(
-                payload.approved_by ||
-                  payload.deleted_by ||
-                  payload.rejected_by ||
-                  "-"
-              ),
-              inline: true
-            },
-            {
-              name: "Keterangan",
-              value: String(payload.note || payload.reason || payload.row?.reason || "-"),
-              inline: false
-            }
+            { name: "Record ID", value: String(payload.id || payload.profile_id || ev.id || "-"), inline: true },
+            { name: "Nama", value: String(payload.nama || payload.name || payload.row?.target_name || "-"), inline: true },
+            { name: "Divisi", value: String(normalizeDivisi(payload.divisi || payload.division || "-")), inline: true },
+            { name: "Jenis", value: String(payload.type || ev.event_type || "-"), inline: true },
+            { name: "Diproses oleh", value: String(payload.approved_by || payload.deleted_by || payload.rejected_by || payload.archived_by || payload.requested_by || "-"), inline: true },
+            { name: "Keterangan", value: String(payload.note || payload.reason || payload.row?.reason || "-"), inline: false }
           )
           .setTimestamp();
 
-        if (["REPORT_APPROVED","REPORT_REJECTED","REPORT_ARCHIVED"].includes(ev.event_type) && payload.type) {
-          targetKey = reportLogKey(payload.type);
-        }
-
         await sendTo(targetKey, embed, []);
-
-        await supabase
-          .from("bot_events")
-          .update({
-            status: "DONE",
-            processed_at: new Date().toISOString()
-          })
-          .eq("id", ev.id);
+        await supabase.from("bot_events").update({ status: "DONE", processed_at: new Date().toISOString() }).eq("id", ev.id);
       }
     )
     .subscribe(s => console.log("bot_events realtime:", s));
@@ -835,23 +866,75 @@ async function syncPendingAttendance() {
 
   for (const r of data || []) {
     const kind = String(r.type || "ABSENSI").toUpperCase();
-    const key = kind === "ABSENSI" ? "log_absensi" : "log_izin_cuti";
 
-    const embed = new EmbedBuilder()
-      .setTitle(kind === "ABSENSI" ? "📋 ABSENSI PENDING BELUM DIKIRIM" : `📋 ${kind} PENDING BELUM DIKIRIM`)
-      .setColor(0xffd400)
-      .addFields(
-        { name: "Nama", value: r.nama || "-", inline: true },
-        { name: "Badge", value: r.badge_number || "NO BADGE", inline: true },
-        { name: "Jabatan", value: r.jabatan || "-", inline: true },
-        { name: "Divisi", value: r.divisi || "-", inline: true },
-        { name: "Status", value: r.type || "-", inline: true },
-        { name: "Lokasi", value: r.location || "-", inline: true },
-        { name: "Keterangan", value: r.note || "-", inline: false },
-        { name: "Bukti", value: evidenceText(r), inline: false }
-      )
-      .setFooter({ text: `Record ID: ${r.id}` })
-      .setTimestamp();
+    let embed;
+    let key = "log_absensi";
+
+    if (kind === "ABSENSI") {
+      embed = new EmbedBuilder()
+        .setTitle("📋 ABSENSI PENDING BELUM DIKIRIM")
+        .setColor(0xffd400)
+        .addFields(
+          { name: "Nama", value: r.nama || "-", inline: true },
+          { name: "Badge", value: r.badge_number || "NO BADGE", inline: true },
+          { name: "Jabatan", value: r.jabatan || "-", inline: true },
+          { name: "Divisi", value: normalizeDivisi(r.divisi), inline: true },
+          { name: "Lokasi", value: r.location || "-", inline: true },
+          { name: "Keterangan", value: r.note || "-", inline: false },
+          { name: "Bukti", value: evidenceText(r), inline: false }
+        )
+        .setFooter({ text: `Record ID: ${r.id}` })
+        .setTimestamp();
+    } else if (kind === "IZIN" || kind === "CUTI") {
+      key = "log_izin_cuti";
+      const tanggalMulai = r.leave_start_date || "-";
+      const tanggalAkhir = r.leave_end_date || r.leave_start_date || "-";
+
+      embed = new EmbedBuilder()
+        .setColor(0xfbbf24)
+        .setDescription(
+`<@&1491453968138895431>
+
+**SURAT PERMOHONAN IZIN KEPOLISIAN MAYDAY**
+\`\`\`
+Dengan hormat bapak JENDRAL/KOMJEN.
+
+Dengan ini saya : ${kind}
+
+Nama      : ${r.nama || "-"}
+Pangkat  : ${normalizeRank(r.rank_detail || r.jabatan || "-")}
+Satuan   : ${normalizeDivisi(r.divisi || "-")}
+Alasan   : ${r.note || "-"}
+
+Tanggal Izin      : ${tanggalMulai}
+Tanggal berakhir  : ${tanggalAkhir}
+
+Demikian surat permohonan izin ini kami sampaikan agar para petinggi dapat memaklumkan dan saya ucapkan terimakasih.
+\`\`\``)
+        .addFields(
+          { name: "Bukti", value: evidenceText(r), inline: false },
+          { name: "Catatan", value: "ACC / TOLAK hanya lewat Website MDT.", inline: false }
+        )
+        .setFooter({ text: `Record ID: ${r.id}` })
+        .setTimestamp();
+    } else {
+      key = "log_izin_cuti";
+      embed = new EmbedBuilder()
+        .setTitle(`📋 ${kind} PENDING BELUM DIKIRIM`)
+        .setColor(0xffd400)
+        .addFields(
+          { name: "Nama", value: r.nama || "-", inline: true },
+          { name: "Badge", value: r.badge_number || "NO BADGE", inline: true },
+          { name: "Jabatan", value: r.jabatan || "-", inline: true },
+          { name: "Divisi", value: normalizeDivisi(r.divisi), inline: true },
+          { name: "Status", value: r.type || "-", inline: true },
+          { name: "Lokasi", value: r.location || "-", inline: true },
+          { name: "Keterangan", value: r.note || "-", inline: false },
+          { name: "Bukti", value: evidenceText(r), inline: false }
+        )
+        .setFooter({ text: `Record ID: ${r.id}` })
+        .setTimestamp();
+    }
 
     if (r.evidence_url) embed.setImage(r.evidence_url);
 
