@@ -1408,15 +1408,40 @@ function attendanceForm(){
     </div>
 
     <div id="cuti_fields" class="form-window cuti-window" style="display:none">
-      <h3>DATA CUTI</h3>
-      <div class="row"><div class="field"><label>Tanggal Mulai Cuti</label><input id="cuti_start" type="date" value="${today}"/></div><div class="field"><label>Tanggal Selesai Cuti</label><input id="cuti_end" type="date" value="${today}"/></div></div>
-    </div>
+  <h3>DATA CUTI</h3>
 
-    <div class="field"><label>Catatan / Alasan</label><textarea id="abs_note" placeholder="Alasan izin/cuti atau keterangan absensi"></textarea></div>
-    <div class="field"><label id="abs_file_label">Bukti Foto Wajib Bisa Lebih Dari 1</label><input id="abs_file" type="file" accept="image/*" multiple/></div>
-    <button class="btn green" onclick="submitAttendance()">KIRIM PENGAJUAN</button>
-  </section>`;
-}
+  <div class="row">
+    <div class="field">
+      <label>Tanggal Mulai Cuti</label>
+      <input id="cuti_start_date" type="date" value="${today}" onchange="markFormDirty()"/>
+    </div>
+    <div class="field">
+      <label>Jam Mulai Cuti</label>
+      <input id="cuti_start_time" type="text" inputmode="numeric" placeholder="Contoh 08:30 / 0830" oninput="markFormDirty()"/>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>Tanggal Selesai Cuti</label>
+      <input id="cuti_end_date" type="date" value="${today}" onchange="markFormDirty()"/>
+    </div>
+    <div class="field">
+      <label>Jam Selesai Cuti</label>
+      <input id="cuti_end_time" type="text" inputmode="numeric" placeholder="Contoh 17:30 / 1730" oninput="markFormDirty()"/>
+    </div>
+  </div>
+
+  <div class="duty-note">
+    <b>KETERANGAN CUTI</b>
+    <ul>
+      <li>Tanggal dan jam mulai cuti wajib diisi.</li>
+      <li>Tanggal dan jam selesai cuti wajib diisi.</li>
+      <li>Format jam memakai 24 jam, contoh 08:30 atau 1730.</li>
+      <li>Cuti yang di-ACC mengurangi payroll Rp4.000.</li>
+    </ul>
+  </div>
+</div>
 
 function attendanceAdminPanel(){
   let rows = S.attendance;
