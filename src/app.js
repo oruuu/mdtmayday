@@ -1443,6 +1443,12 @@ function attendanceForm(){
   </div>
 </div>
 
+    <div class="field"><label>Catatan / Alasan</label><textarea id="abs_note" placeholder="Alasan izin/cuti atau keterangan absensi"></textarea></div>
+    <div class="field"><label id="abs_file_label">Bukti Foto Wajib Bisa Lebih Dari 1</label><input id="abs_file" type="file" accept="image/*" multiple/></div>
+    <button class="btn green" onclick="submitAttendance()">KIRIM PENGAJUAN</button>
+  </section>`;
+}
+
 function attendanceAdminPanel(){
   let rows = S.attendance;
 
