@@ -2412,8 +2412,39 @@ async function deleteSP(id){
   render();
 }
 
-function recalcPayrollResearchRates(){
-  toast("Tarif payroll berhasil diriset ulang berdasarkan jabatan terbaru.", "success");
+async function recalcPayrollResearchRates(){
+
+  if(!confirm("Reset seluruh pending payroll anggota menjadi Rp0?")){
+    return;
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      pending_payroll: 0
+    })
+    .gt("id",0);
+
+  if(error){
+    alert(error.message);
+    return;
+  }
+
+  await createAuditLog(
+    "ADMIN",
+    "RESET_ALL_PAYROLL",
+    "profiles",
+    null,
+    {
+      action:"RESET_PENDING_PAYROLL",
+      value:0
+    }
+  );
+
+  toast("Seluruh pending payroll berhasil direset.", "success");
+
+  await refreshMembers();
+
   render();
 }
 function payrollResearchPanel(){
