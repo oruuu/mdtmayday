@@ -3017,7 +3017,10 @@ function openMemberEditor(id){
     <div class="field"><label>Divisi</label><select id="edit_divisi">${DIV.map(x => `<option ${m.divisi===x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Status</label><select id="edit_status">${statusOptions(m.status)}</select></div>
     ${admin() ? `<div class="point-editor-grid">
-      <div class="field"><label>Duty Point</label><input id="edit_duty_points" type="number" step="0.01" min="0" value="${Number(m.duty_points || 0)}"/></div>
+      <div class="field">
+  <label>Edit Gaji / Pending Payroll</label>
+  <input id="edit_pending_payroll" type="number" min="0" step="1" value="${Number(m.pending_payroll || 0)}"/>
+</div>
       <div class="field"><label>Total Point Activity</label><input id="edit_activity_points_total" type="number" step="0.01" min="0" value="${Number(m.activity_points_total || 0)}"/></div>
     </div>
     <p class="mini">Hanya PATI / SUPER ADMIN yang bisa edit point manual. Masuk audit log.</p>` : ""}
@@ -3070,7 +3073,7 @@ async function saveMember(id){
   const rank_detail = document.querySelector("#edit_rank")?.value || "";
   const divisi = document.querySelector("#edit_divisi")?.value || "";
   const status = document.querySelector("#edit_status")?.value || "";
-  const duty_points = Number(document.querySelector("#edit_duty_points")?.value || 0);
+  const pending_payroll = Number(document.querySelector("#edit_pending_payroll")?.value || 0);
   const activity_points_total = Number(document.querySelector("#edit_activity_points_total")?.value || 0);
 
   if(!display_name) return toast("Nama tidak boleh kosong.", "error");
@@ -3092,7 +3095,7 @@ async function saveMember(id){
     };
 
     if(admin()){
-      updateData.duty_points = Math.max(0, duty_points);
+      updateData.pending_payroll = Math.max(0, pending_payroll);
       updateData.activity_points_total = Math.max(0, activity_points_total);
     }
 
@@ -3131,7 +3134,7 @@ async function saveMember(id){
       rank_detail,
       divisi,
       status,
-      duty_points: admin() ? Math.max(0, duty_points) : undefined,
+      pending_payroll: admin() ? Math.max(0, pending_payroll) : undefined,
       activity_points_total: admin() ? Math.max(0, activity_points_total) : undefined,
       requested_by: userDisplayName()
     }).catch(err => console.warn("botEvent failed:", err.message));
