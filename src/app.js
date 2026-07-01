@@ -578,8 +578,16 @@ function skeletonPage(title = "MEMUAT"){
       ${promotionAdminPanel()}<section class="card skeleton-card"><div class="skeleton sk-title"></div><div class="skeleton sk-line"></div><div class="skeleton sk-line short"></div></section><section class="grid">${Array.from({length:6}).map(()=>`<div class="tile skeleton-tile"><div class="skeleton sk-icon"></div><div class="skeleton sk-line"></div></div>`).join("")}</section></main></main>`;
 }
 async function withLoading(text, fn){
-  try{ S.loading = true; S.loadingText = text || "Memproses..."; render(); await sleep(140); return await fn(); }
-  finally{ S.loading = false; }
+  try{
+    S.loading = true;
+    S.loadingText = text || "Memproses...";
+    render();
+    await sleep(140);
+    return await fn();
+  } finally {
+    S.loading = false;
+    render();
+  }
 }
 function sidebar(){
   if(!S.profile || S.profile.status !== "ACTIVE") return "";
@@ -1507,6 +1515,7 @@ function renderEvidenceLinks(r){
 }
 
 async function submitAttendance(){
+  return withLoading("Mengupload bukti dan mengirim pengajuan absensi...", async () => {
   try{
     const p = S.profile;
     const type = document.querySelector("#abs_type").value;
@@ -1628,6 +1637,7 @@ if(kind === "CUTI"){
   }catch(err){
     alert(err.message);
   }
+  });
 }
 
 async function approveAttendance(id){
