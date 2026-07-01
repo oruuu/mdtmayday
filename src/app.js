@@ -849,11 +849,15 @@ function applyMemberSearch(){
 
 function setMemberDivisionFilter(v){
   S.memberDivisionFilter = v || "";
+  S.search = String(document.querySelector("#member_search")?.value || S.searchDraft || "").trim();
+  S.searchDraft = S.search;
   render();
 }
 
 function setMemberRankFilter(v){
   S.memberRankFilter = v || "";
+  S.search = String(document.querySelector("#member_search")?.value || S.searchDraft || "").trim();
+  S.searchDraft = S.search;
   render();
 }
 
