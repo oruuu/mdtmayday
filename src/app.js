@@ -1557,17 +1557,22 @@ async function submitAttendance(){
 }
 
   if(kind === "IZIN"){
-  const startDate = document.querySelector("#izin_start_date")?.value;
+    const startDate =
+        document.getElementById("izin_start_date")?.value ||
+        document.querySelector("#izin_start_date")?.value;
 
-  if(!startDate){
-    return alert("Tanggal izin wajib diisi.");
-  }
+    console.log("IZIN DATE =", startDate);
 
-  leaveData = {
-    leave_start_date: startDate,
-    leave_end_date: startDate,
-    payroll_value: attendancePayrollValue(p, kind)
-  };
+    if(!startDate){
+        alert("Tanggal izin wajib diisi.");
+        return;
+    }
+
+    leaveData = {
+        leave_start_date: startDate,
+        leave_end_date: startDate,
+        payroll_value: attendancePayrollValue(p, kind)
+    };
 }
 
 if(kind === "CUTI"){
