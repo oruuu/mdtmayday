@@ -1556,15 +1556,16 @@ async function submitAttendance(){
   };
 }
 
-    if(kind === "IZIN"){
+  if(kind === "IZIN"){
   const startDate = document.querySelector("#izin_start_date")?.value;
 
   if(!startDate){
-    return alert("Tanggal izin wajib diisi lengkap.");
+    return alert("Tanggal izin wajib diisi.");
   }
 
   leaveData = {
     leave_start_date: startDate,
+    leave_end_date: startDate,
     payroll_value: attendancePayrollValue(p, kind)
   };
 }
