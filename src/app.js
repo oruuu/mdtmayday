@@ -2412,6 +2412,7 @@ async function deleteSP(id){
 }
 
 async function recalcPayrollResearchRates(){
+  if(!high()) return alert("Hanya PATI / SUPER ADMIN yang bisa reset payroll.");
 
   if(!confirm("Reset seluruh pending payroll anggota menjadi Rp0?")){
     return;
@@ -2429,20 +2430,14 @@ async function recalcPayrollResearchRates(){
     return;
   }
 
-  await createAuditLog(
-    "ADMIN",
-    "RESET_ALL_PAYROLL",
-    "profiles",
-    null,
-    {
-      action:"RESET_PENDING_PAYROLL",
-      value:0
-    }
-  );
+  await audit("RESET_ALL_PAYROLL", "profiles", "all", {
+    action:"RESET_PENDING_PAYROLL",
+    value:0
+  });
 
   toast("Seluruh pending payroll berhasil direset.", "success");
 
-  await refreshMembers();
+  await loadAll();
 
   render();
 }
@@ -3275,6 +3270,13 @@ Object.assign(window, {
   go,
   setTab,
   setSearch,
+  markFormDirty,
+  setMemberSearchDraft,
+  applyMemberSearch,
+  setMemberDivisionFilter,
+  setMemberRankFilter,
+  clearMemberFilters,
+  forceRefreshPersonnel,
   submitAttendance,
   renderAbsensiTypeHint,
   updateDutyPreview,
@@ -3316,7 +3318,9 @@ Object.assign(window, {
   toggleTheme,
   setTheme,
   syncDiscord,
-  setPayrollResearchPeriod
+  setPayrollResearchPeriod,
+  recalcPayrollResearchRates,
+  monthKey
 });
 
 init().catch(err => {
