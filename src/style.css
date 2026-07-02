@@ -1843,3 +1843,247 @@ html[data-theme="dark"] textarea{
   border-color:rgba(255,255,255,.10)!important;
   box-shadow:0 18px 42px rgba(0,0,0,.24)!important;
 }
+
+/* ===============================
+   MAYDAY VISUAL BALANCE PATCH
+================================== */
+:root{
+  --bg:#edf3f8;
+  --surface:#ffffff;
+  --surface-2:#f5f8fc;
+  --ink:#121827;
+  --muted:#667085;
+  --line:rgba(18,24,39,.14);
+  --blue:#2f66d0;
+  --teal:#14a690;
+  --yellow:#f4c542;
+  --rose:#dc4f64;
+  --navy:#141c2f;
+  --radius:8px;
+  --radius-sm:6px;
+  --shadow:0 16px 38px rgba(16,24,40,.12);
+  --soft-shadow:0 8px 22px rgba(16,24,40,.10);
+}
+
+body{
+  background:
+    linear-gradient(135deg,rgba(47,102,208,.08) 0%,rgba(20,166,144,.08) 38%,rgba(244,197,66,.10) 100%),
+    linear-gradient(180deg,#f5f8fc 0%,#e9f0f7 100%);
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background-image:
+    linear-gradient(rgba(18,24,39,.035) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(18,24,39,.035) 1px,transparent 1px);
+  background-size:32px 32px;
+  mask-image:linear-gradient(180deg,rgba(0,0,0,.8),rgba(0,0,0,.18));
+  z-index:-1;
+}
+
+.app,
+.layout-main>.app{
+  background:rgba(237,243,248,.86);
+}
+
+.topbar{
+  border-bottom:1px solid var(--line)!important;
+}
+
+.topbar::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:-1px;
+  height:3px;
+  background:linear-gradient(90deg,var(--blue),var(--teal),var(--yellow),var(--rose));
+}
+
+.card,
+.tile,
+.list-item,
+.login-frame,
+.stats-grid div,
+.live-member,
+.payroll-preview div,
+.payroll-summary div,
+.payroll-mini div,
+.activity-rank-row div{
+  border:1px solid var(--line)!important;
+  border-radius:8px!important;
+  background:rgba(255,255,255,.92)!important;
+  box-shadow:var(--shadow)!important;
+}
+
+.card{
+  position:relative;
+  overflow:hidden;
+}
+
+.card::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:4px;
+  background:linear-gradient(180deg,var(--blue),var(--teal));
+}
+
+.card.yellow::before{
+  background:linear-gradient(180deg,var(--yellow),#f59e0b);
+}
+
+.card.red::before{
+  background:linear-gradient(180deg,var(--rose),#ef4444);
+}
+
+.card.green::before{
+  background:linear-gradient(180deg,var(--teal),#22c55e);
+}
+
+.blue{
+  background:
+    linear-gradient(135deg,rgba(255,255,255,.14),rgba(255,255,255,0) 42%),
+    linear-gradient(135deg,#2457bf,#16336f)!important;
+}
+
+.yellow{
+  background:linear-gradient(135deg,#fff7cf,#ffe08a)!important;
+  color:#121827!important;
+}
+
+.green{
+  background:linear-gradient(135deg,#dffbee,#b8f0d4)!important;
+  color:#121827!important;
+}
+
+.red{
+  background:linear-gradient(135deg,#ffe5e8,#ffc9d0)!important;
+  color:#121827!important;
+}
+
+.btn,
+.exit-btn,
+.tabs button,
+.archive-month-tabs button,
+.theme-toggle{
+  border-radius:8px!important;
+  border:1px solid rgba(18,24,39,.18)!important;
+  box-shadow:var(--soft-shadow)!important;
+  letter-spacing:.2px;
+}
+
+.btn{
+  background:linear-gradient(135deg,#182238,#0f172a);
+}
+
+.btn.blue{
+  background:linear-gradient(135deg,#386fe0,#214ea8)!important;
+}
+
+.btn.green{
+  background:linear-gradient(135deg,#1dbd78,#128151)!important;
+}
+
+.btn.red{
+  background:linear-gradient(135deg,#e25566,#b72f42)!important;
+}
+
+.btn.yellow{
+  background:linear-gradient(135deg,#f7d45d,#e7aa21)!important;
+}
+
+input,
+select,
+textarea{
+  border-radius:8px!important;
+  background:linear-gradient(180deg,#fff,#f8fafc)!important;
+}
+
+.table{
+  border-radius:8px!important;
+}
+
+.table th{
+  background:linear-gradient(135deg,#182238,#101827)!important;
+}
+
+.tabs button.active,
+.archive-month-tabs button.active{
+  background:linear-gradient(135deg,var(--navy),#263550)!important;
+}
+
+.status.ACTIVE,
+.status.APPROVED{
+  background:#d8f8e4!important;
+  color:#11623b;
+}
+
+.status.PENDING{
+  background:#fff0bd!important;
+  color:#8a5a00;
+}
+
+.status.REJECTED,
+.status.SUSPENDED,
+.status.PTDH,
+.status.DELETED{
+  background:#ffd6dc!important;
+  color:#8b1d2c;
+}
+
+.status.ARCHIVED{
+  background:#dce8ff!important;
+  color:#234ea0;
+}
+
+.nav{
+  background:rgba(255,255,255,.88)!important;
+}
+
+.nav button.active span{
+  filter:drop-shadow(0 4px 8px rgba(47,102,208,.28));
+}
+
+@media(min-width:980px){
+  .layout-shell{
+    background:
+      linear-gradient(135deg,rgba(47,102,208,.10),rgba(20,166,144,.08) 42%,rgba(244,197,66,.10)),
+      #edf3f8!important;
+  }
+
+  .sidebar{
+    background:
+      linear-gradient(180deg,rgba(47,102,208,.20),rgba(20,166,144,.10)),
+      #111827!important;
+  }
+
+  .sidebar-nav button.active{
+    background:linear-gradient(135deg,var(--yellow),#f6d96d)!important;
+    color:#121827!important;
+  }
+}
+
+html[data-theme="dark"] body{
+  background:
+    linear-gradient(135deg,rgba(47,102,208,.16),rgba(20,166,144,.10) 48%,rgba(244,197,66,.08)),
+    #080d18;
+}
+
+html[data-theme="dark"] body::before{
+  background-image:
+    linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);
+}
+
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .tile,
+html[data-theme="dark"] .list-item,
+html[data-theme="dark"] .stats-grid div{
+  background:rgba(15,23,42,.92)!important;
+}
