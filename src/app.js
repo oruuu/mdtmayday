@@ -2351,7 +2351,7 @@ function propamPage(){
 
       <section class="card">
         <h2>RIWAYAT SP / PTDH</h2>
-        ${S.propam.length ? `<table class="table">
+        ${S.propam.length ? `<table class="table propam-table">
           <thead><tr><th>Target</th><th>Tindakan</th><th>Alasan</th><th>Oleh</th><th>Aksi</th></tr></thead>
           <tbody>${S.propam.map(x => `<tr>
             <td>${e(x.target_name)}</td>
@@ -2624,7 +2624,7 @@ function logPage(){
 function logTable(title, rows, type){
   return `<section class="card">
     <h2>${title}</h2>
-    ${rows.length ? `<table class="table">
+    ${rows.length ? `<table class="table log-table">
       <thead>
         <tr>
           <th>Data</th>
