@@ -2087,3 +2087,140 @@ html[data-theme="dark"] .list-item,
 html[data-theme="dark"] .stats-grid div{
   background:rgba(15,23,42,.92)!important;
 }
+
+/* ===============================
+   MOBILE ATTENDANCE TABLE FIX
+================================== */
+@media(max-width:680px){
+  .page{
+    padding:16px 10px;
+  }
+
+  .attendance-split{
+    gap:16px;
+  }
+
+  .attendance-split .card{
+    padding:16px 10px;
+    margin-bottom:18px;
+  }
+
+  .attendance-split .section-head{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:10px;
+    align-items:start;
+  }
+
+  .attendance-split .section-head h2{
+    font-size:28px;
+    line-height:1.05;
+  }
+
+  .attendance-split .section-head .status{
+    width:max-content;
+    max-width:100%;
+  }
+
+  .attendance-table,
+  .attendance-table thead,
+  .attendance-table tbody,
+  .attendance-table tr,
+  .attendance-table th,
+  .attendance-table td{
+    display:block;
+    width:100%;
+  }
+
+  .attendance-table{
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    box-shadow:none!important;
+    overflow:visible;
+  }
+
+  .attendance-table thead{
+    position:absolute;
+    width:1px;
+    height:1px;
+    padding:0;
+    margin:-1px;
+    overflow:hidden;
+    clip:rect(0,0,0,0);
+    white-space:nowrap;
+    border:0;
+  }
+
+  .attendance-table tbody{
+    display:grid;
+    gap:12px;
+  }
+
+  .attendance-table tr{
+    background:#fff;
+    border:1px solid var(--line)!important;
+    border-radius:8px!important;
+    box-shadow:var(--soft-shadow)!important;
+    padding:12px;
+  }
+
+  .attendance-table td{
+    display:grid;
+    grid-template-columns:minmax(82px,32%) minmax(0,1fr);
+    gap:10px;
+    align-items:start;
+    border:0!important;
+    padding:9px 0!important;
+    font-size:13px!important;
+    line-height:1.3;
+    overflow-wrap:anywhere;
+  }
+
+  .attendance-table td + td{
+    border-top:1px solid rgba(18,24,39,.10)!important;
+  }
+
+  .attendance-table td::before{
+    color:#667085;
+    font-size:11px;
+    font-weight:900;
+    text-transform:uppercase;
+    line-height:1.3;
+  }
+
+  .attendance-table td:nth-child(1)::before{content:"Anggota";}
+  .attendance-table td:nth-child(2)::before{content:"Jenis";}
+  .attendance-table td:nth-child(3)::before{content:"Status";}
+  .attendance-table td:nth-child(4)::before{content:"Payroll";}
+  .attendance-table td:nth-child(5)::before{content:"Keterangan";}
+  .attendance-table td:nth-child(6)::before{content:"Aksi";}
+
+  .attendance-table .mini{
+    font-size:12px!important;
+    line-height:1.35;
+  }
+
+  .attendance-table .status,
+  .attendance-table .type-pill{
+    width:max-content;
+    max-width:100%;
+    white-space:normal;
+    text-align:center;
+  }
+
+  .attendance-table .btn.small{
+    width:100%;
+    margin-top:8px;
+    padding:10px 12px;
+    font-size:12px;
+  }
+
+  .attendance-table .evidence-links{
+    margin-top:8px;
+  }
+}
+
+html[data-theme="dark"] .attendance-table tr{
+  background:rgba(15,23,42,.92)!important;
+}

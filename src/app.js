@@ -1473,7 +1473,7 @@ function attendanceAdminPanel(){
 function attendanceTableBlock(title, cls, rows, desc){
   return `<section class="card ${cls}">
     <div class="section-head"><div><h2>${title}</h2><p class="mini">${desc}</p></div><span class="status PENDING">${rows.filter(x => x.status === "PENDING").length} PENDING</span></div>
-    ${rows.length ? `<table class="table"><thead><tr><th>Anggota</th><th>Jenis</th><th>Status</th><th>Payroll</th><th>Keterangan</th>${canApproveAttendance() ? `<th>Aksi</th>` : ""}</tr></thead><tbody>
+    ${rows.length ? `<table class="table attendance-table"><thead><tr><th>Anggota</th><th>Jenis</th><th>Status</th><th>Payroll</th><th>Keterangan</th>${canApproveAttendance() ? `<th>Aksi</th>` : ""}</tr></thead><tbody>
       ${rows.map(r => {
         const kind = String(r.type || "").toUpperCase();
         const member = S.members.find(x => Number(x.id) === Number(r.user_id));

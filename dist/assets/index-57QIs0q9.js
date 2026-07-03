@@ -466,7 +466,7 @@ Note: Bukti KTP & Barang Bukti wajib diunggah melalui tombol lampiran media di b
     ${Jr("IZIN & CUTI","izin-cuti-block",r,"Log gabungan pengajuan IZIN dan CUTI.")}
   </section>`}function Jr(t,e,r,s){return`<section class="card ${e}">
     <div class="section-head"><div><h2>${t}</h2><p class="mini">${s}</p></div><span class="status PENDING">${r.filter(i=>i.status==="PENDING").length} PENDING</span></div>
-    ${r.length?`<table class="table"><thead><tr><th>Anggota</th><th>Jenis</th><th>Status</th><th>Payroll</th><th>Keterangan</th>${ne()?"<th>Aksi</th>":""}</tr></thead><tbody>
+    ${r.length?`<table class="table attendance-table"><thead><tr><th>Anggota</th><th>Jenis</th><th>Status</th><th>Payroll</th><th>Keterangan</th>${ne()?"<th>Aksi</th>":""}</tr></thead><tbody>
       ${r.map(i=>{const n=String(i.type||"").toUpperCase(),a=c.members.find(u=>Number(u.id)===Number(i.user_id)),o=Number(i.payroll_value||we(a,n)),l=n==="ABSENSI"?`Per absensi: <b>${I(Math.abs(o))}</b><br><span class="mini">Tanggal: ${p(i.duty_start_date||String(i.created_at||"").slice(0,10)||"-")}</span>`:n==="IZIN"?`Potongan: <b>-${I(pe)}</b><br>Tanggal izin: <b>${p(i.leave_start_date||"-")}</b>`:`Potongan: <b>-${I(pe)}</b><br>Mulai: <b>${p(i.leave_start_date||"-")}</b><br>Selesai: <b>${p(i.leave_end_date||"-")}</b>`;return`<tr>
           <td><b>${p(i.nama)}</b><br><span class="mini">${p(i.badge_number||"NO BADGE")} • ${p(i.divisi||"-")}</span></td>
           <td><span class="type-pill ${p(String(i.type||"").toLowerCase())}">${p(i.type||"-")}</span></td>
