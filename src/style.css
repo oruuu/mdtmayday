@@ -2089,6 +2089,57 @@ html[data-theme="dark"] .stats-grid div{
 }
 
 /* ===============================
+   DESKTOP ATTENDANCE TABLE FIX
+================================== */
+@media(min-width:681px){
+  .attendance-split,
+  .attendance-split .card{
+    min-width:0;
+  }
+
+  .attendance-split .card{
+    overflow:hidden;
+  }
+
+  .attendance-table{
+    display:block;
+    width:100%;
+    max-width:100%;
+    overflow-x:auto!important;
+    overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  .attendance-table thead,
+  .attendance-table tbody{
+    display:table;
+    width:100%;
+    min-width:720px;
+  }
+
+  .attendance-table tr{
+    display:table-row;
+  }
+
+  .attendance-table th,
+  .attendance-table td{
+    display:table-cell;
+  }
+}
+
+@media(min-width:1180px) and (max-width:1439px){
+  .attendance-split{
+    grid-template-columns:1fr;
+  }
+}
+
+@media(min-width:1440px){
+  .attendance-split{
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  }
+}
+
+/* ===============================
    MOBILE ATTENDANCE TABLE FIX
 ================================== */
 @media(max-width:680px){

@@ -740,7 +740,7 @@ Note: Bukti KTP & Barang Bukti wajib diunggah melalui tombol lampiran media di b
 
       <section class="card">
         <h2>RIWAYAT SP / PTDH</h2>
-        ${c.propam.length?`<table class="table">
+        ${c.propam.length?`<table class="table propam-table">
           <thead><tr><th>Target</th><th>Tindakan</th><th>Alasan</th><th>Oleh</th><th>Aksi</th></tr></thead>
           <tbody>${c.propam.map(t=>`<tr>
             <td>${p(t.target_name)}</td>
@@ -843,7 +843,7 @@ Note: Bukti KTP & Barang Bukti wajib diunggah melalui tombol lampiran media di b
     </main>${oe()}
   </main>`}function Ht(t,e,r){return`<section class="card">
     <h2>${t}</h2>
-    ${e.length?`<table class="table">
+    ${e.length?`<table class="table log-table">
       <thead>
         <tr>
           <th>Data</th>
