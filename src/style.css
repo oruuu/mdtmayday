@@ -2092,12 +2092,13 @@ html[data-theme="dark"] .stats-grid div{
    DESKTOP ATTENDANCE TABLE FIX
 ================================== */
 @media(min-width:681px){
-  .attendance-split,
-  .attendance-split .card{
+  .attendance-split{
+    grid-template-columns:1fr!important;
     min-width:0;
   }
 
   .attendance-split .card{
+    min-width:0;
     overflow:hidden;
   }
 
@@ -2125,17 +2126,10 @@ html[data-theme="dark"] .stats-grid div{
   .attendance-table td{
     display:table-cell;
   }
-}
 
-@media(min-width:1180px) and (max-width:1439px){
-  .attendance-split{
-    grid-template-columns:1fr;
-  }
-}
-
-@media(min-width:1440px){
-  .attendance-split{
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  .attendance-table .btn.small{
+    min-width:72px;
+    white-space:nowrap;
   }
 }
 
