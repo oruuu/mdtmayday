@@ -1157,7 +1157,7 @@ function leaderboardTable(title, rows, mode){
         <tr>
           <th>#</th>
           <th>Anggota</th>
-          <th>Jabatan / Divisi</th>
+          <th>Rank / Devisi</th>
           <th>Payroll</th>
           <th>Activity</th>
           <th>Status</th>
@@ -1179,7 +1179,7 @@ function leaderboardTable(title, rows, mode){
               </div>
             </td>
             <td>
-              <b>${e(m.jabatan || "-")}</b><br>
+              <b>${e(m.rank_detail || m.jabatan || "-")}</b><br>
               <span class="mini">${e(normalizeDivisi(m.divisi || "-"))}</span>
             </td>
             <td>
