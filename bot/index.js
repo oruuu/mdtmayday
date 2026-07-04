@@ -303,9 +303,28 @@ function evidenceText(row) {
     urls.push(row.evidence_url);
   }
 
-  if (!urls.length) return "-";
+  const cleanUrls = urls
+    .map(u => String(u || "").trim())
+    .filter(Boolean);
 
-  return urls.map((u, i) => `[Bukti ${i + 1}](${u})`).join("\n");
+  if (!cleanUrls.length) return "-";
+
+  const lines = cleanUrls.map((u, i) => `[Bukti ${i + 1}](${u})`);
+  let text = "";
+
+  for (const line of lines) {
+    const next = text ? `${text}\n${line}` : line;
+    if (next.length > 1024) break;
+    text = next;
+  }
+
+  const remaining = lines.length - (text ? text.split("\n").length : 0);
+  if (remaining > 0) {
+    const suffix = `\n+${remaining} bukti lainnya`;
+    text = `${text.slice(0, 1024 - suffix.length)}${suffix}`;
+  }
+
+  return text || "-";
 }
 
 function watchAttendance() {

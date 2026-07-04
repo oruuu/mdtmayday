@@ -171,7 +171,7 @@ function isUnlimitedRank(rank){
 
 function rankProgress(member = S.profile){
   const rank = normalizeRank(member?.rank_detail || member?.jabatan || "CASIS");
-  const point = Number(member?.activity_points_month || 0);
+  const point = Number(member?.activity_points_total || 0);
   const cap = activityCapFor(member);
   const unlimited = isUnlimitedRank(rank) || cap >= 999999;
   const pct = unlimited ? 100 : Math.min(100, Math.round((point / Math.max(1, cap)) * 100));
@@ -351,25 +351,22 @@ async function addActivityPoint(userId, reason = "REPORT_APPROVED", amount = 1){
 
   const period = monthKey();
   const currentPeriod = member.activity_points_period || period;
-  const current = currentPeriod === period ? Number(member.activity_points_month || 0) : 0;
+  const current = Number(member.activity_points_total || 0);
   const cap = activityCapFor(member);
   const unlimited = isUnlimitedRank(member.rank_detail || member.jabatan) || cap >= 999999;
   const add = Number(amount || 1);
   const next = unlimited ? current + add : Math.min(cap, current + add);
   const gained = Math.max(0, next - current);
-  const total = Number(member.activity_points_total || 0) + gained;
 
   await supabase.from("profiles").update({
     activity_points_period: period,
-    activity_points_month: next,
-    activity_points_total: total
+    activity_points_total: next
   }).eq("id", userId);
 
   const local = S.members.find(x => x.id === userId);
   if(local){
     local.activity_points_period = period;
-    local.activity_points_month = next;
-    local.activity_points_total = total;
+    local.activity_points_total = next;
   }
 
   await audit("ADD_ACTIVITY_POINT", "profiles", userId, { reason, before: current, after: next, cap, amount:add, gained });
@@ -1123,7 +1120,7 @@ function leaderboardPage(){
   if(!high()) return blocked("LEADERBOARD KHUSUS PATI / SUPER ADMIN.");
 
   const salaryRows = [...S.members].sort((a,b) => Number(b.pending_payroll || 0) - Number(a.pending_payroll || 0));
-  const activityRows = [...S.members].sort((a,b) => Number(b.activity_points_month || 0) - Number(a.activity_points_month || 0));
+  const activityRows = [...S.members].sort((a,b) => Number(b.activity_points_total || 0) - Number(a.activity_points_total || 0));
   const totalActivityRows = [...S.members].sort((a,b) => Number(b.activity_points_total || 0) - Number(a.activity_points_total || 0));
 
   return `<main class="app">
@@ -1169,7 +1166,7 @@ function leaderboardTable(title, rows, mode){
       <tbody>
         ${rows.map((m,i) => {
           const progress = rankProgress(m);
-          const pointText = progress.unlimited ? `${Number(m.activity_points_month || 0)} / ∞` : `${Number(m.activity_points_month || 0)} / ${progress.cap}`;
+          const pointText = progress.unlimited ? `${Number(m.activity_points_total || 0)} / ∞` : `${Number(m.activity_points_total || 0)} / ${progress.cap}`;
           return `<tr>
             <td><b>#${i+1}</b></td>
             <td>
@@ -2265,7 +2262,7 @@ function memberMini(m, showActions=false){
     </h3>
     <div class="mini">${e(m.badge_number || "NO BADGE")} • ${e(m.jabatan || "-")} • ${e(m.divisi || "-")}</div>
     <div class="mini">Last login: ${fmt(m.last_login)} • Last seen: ${fmt(m.last_seen)}</div>
-    <div class="mini">Absensi bulan ini: ${monthTotal} • Riwayat SP: ${spTotal} • Activity: ${Number(m.activity_points_month || 0)}/${activityCapFor(m)}</div>
+    <div class="mini">Absensi bulan ini: ${monthTotal} • Riwayat SP: ${spTotal} • Activity: ${Number(m.activity_points_total || 0)}/${activityCapFor(m)}</div>
     ${showActions ? `<button class="btn small" onclick="openMemberDetail(${m.id})">DETAIL RIWAYAT</button>` : ""}
     ${admin() && showActions ? `<button class="btn small yellow" onclick="openMemberEditor(${m.id})">EDIT USERNAME / BADGE / JABATAN</button>` : ""}
   </div>`;
@@ -2725,7 +2722,7 @@ async function approvePromotionRequest(id){
 
   const upProfile = await supabase.from("profiles").update({
     rank_detail: newRank,
-    activity_points_month: 0,
+    activity_points_total: 0,
     activity_points_period: monthKey()
   }).eq("id", req.user_id);
   if(upProfile.error) return alert(upProfile.error.message);
