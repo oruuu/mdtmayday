@@ -1,9 +1,5 @@
 import { supabase } from "./supabase.js";
 
-// KONFIGURASI CLOUDINARY (Ganti dengan milik Anda)
-const CLOUDINARY_CLOUD_NAME = "YOUR_CLOUD_NAME"; 
-const CLOUDINARY_UPLOAD_PRESET = "YOUR_UPLOAD_PRESET"; 
-
 const app = document.querySelector("#app");
 
 const S = {
@@ -738,43 +734,23 @@ async function botEvent(event_type, payload = {}){
   }
 }
 
-// ----------------------------------------------------------------------
-// FUNGSI UPLOAD CLOUDINARY
-// ----------------------------------------------------------------------
-async function uploadImageToCloudinary(file) {
-  if (!file) return null;
-  const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      body: fd
-    });
-    const data = await res.json();
-    
-    if (!res.ok) {
-      throw new Error(data.error?.message || "Gagal upload gambar ke Cloudinary");
-    }
-    
-    return data.secure_url;
-  } catch (err) {
-    console.error("Cloudinary Error:", err);
-    throw err;
-  }
+async function uploadOne(file, folder){
+  if(!file) return null;
+  const ext = file.name.split(".").pop();
+  const path = `${folder}/${S.profile.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const { error } = await supabase.storage.from("evidence").upload(path, file, { upsert:false });
+  if(error) throw error;
+  return supabase.storage.from("evidence").getPublicUrl(path).data.publicUrl;
 }
 
-async function uploadMany(files, folder = null) {
+async function uploadMany(files, folder){
   const arr = Array.from(files || []);
   const urls = [];
-  for (const file of arr) {
-    urls.push(await uploadImageToCloudinary(file));
+  for(const file of arr){
+    urls.push(await uploadOne(file, folder));
   }
   return urls;
 }
-// ----------------------------------------------------------------------
 
 function top(title){
   const p = S.profile;
@@ -3368,3 +3344,4 @@ document.addEventListener("change", e => {
     S.formDirty = true;
   }
 });
+/// md
