@@ -2456,3 +2456,42 @@ html[data-theme="dark"] .propam-table tr,
 html[data-theme="dark"] .log-table tr{
   background:rgba(15,23,42,.92)!important;
 }
+
+
+/* Personal Charges styles (append to end of src/style.css) */
+
+.pc-search { padding: 12px 0; }
+.pc-search-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.pc-input { padding:8px 10px; border-radius:6px; border:1px solid #d0d7de; min-width:180px; flex:1; }
+
+.pc-results { margin-top:12px; }
+.pc-cards { display:flex; flex-direction:column; gap:10px; }
+.pc-card { display:flex; gap:12px; background:#fff; border-radius:8px; padding:12px; box-shadow:0 1px 2px rgba(0,0,0,0.04); align-items:center; border:3px solid #000; }
+.pc-card-left { width:84px; }
+.pc-photo { width:72px; height:72px; object-fit:cover; border-radius:6px; background:#f3f4f6; display:block; }
+.pc-photo.placeholder { display:flex;align-items:center;justify-content:center;color:#6b7280;height:72px;border-radius:6px; }
+
+.pc-card-body { flex:1; }
+.pc-card-title { font-weight:700; margin-bottom:4px; }
+.pc-card-meta { color:#6b7280; font-size:13px; margin-bottom:8px; }
+.pc-card-stats { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+.pc-stat { color:#374151; font-size:13px; }
+.pc-badge .badge { padding:4px 8px; border-radius:999px; font-size:12px; display:inline-block; }
+
+.badge { background:#e6eefc; color:#0b3a66; padding:4px 8px; border-radius:999px; font-weight:600; }
+.badge-active { background:#ecfdf5; color:#065f46; }
+.badge-released { background:#fef3c7; color:#92400e; }
+.badge-wanted { background:#fff7ed; color:#92400e; }
+.badge-cleared { background:#eef2ff; color:#4338ca; }
+
+.modal { position:fixed; left:0; right:0; top:0; bottom:0; display:flex; align-items:center; justify-content:center; background:rgba(15,23,42,0.6); z-index:70; padding:20px; }
+.modal-panel { background:#fff; border-radius:8px; width:min(1000px,95%); max-height:90vh; overflow:auto; padding:16px; position:relative; }
+.modal-close { position:absolute; right:12px; top:8px; border:none; background:transparent; font-size:22px; cursor:pointer; }
+
+/* table small style */
+.pc-table th, .pc-table td { padding:8px 10px; border-bottom:1px solid #eef2f7; font-size:13px; text-align:left; vertical-align:top; }
+@media (max-width:720px) {
+  .pc-search-row { flex-direction:column; align-items:stretch; }
+  .pc-card { flex-direction:column; align-items:flex-start; }
+  .pc-card-left{ width:100%; }
+}
