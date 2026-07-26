@@ -21,37 +21,64 @@ export const PersonalChargesService = {
   },
 
   async search({ qNama, qCitizenId, qPhone, qDiscordId, limit = 20 } = {}) {
-    // Build query
-    let qb = supabase.from('personal_charges').select('*, report_ids').limit(limit);
-
-    // Apply filters (Supabase JS doesn't allow dynamic where chaining easily; use query builder approach)
-    const clauses = [];
-    if (qNama) clauses.push({ col: 'nama', val: `%${qNama}%` });
-    if (qCitizenId) clauses.push({ col: 'citizen_id', val: `%${qCitizenId}%` });
-    if (qPhone) clauses.push({ col: 'phone', val: `%${qPhone}%` });
-
-    // Start query with supabase.filter style
     try {
-      if (qNama) qb = supabase.from('personal_charges').select('*, report_ids').ilike('nama', `%${qNama}%`).limit(limit);
-      else if (qCitizenId) qb = supabase.from('personal_charges').select('*, report_ids').ilike('citizen_id', `%${qCitizenId}%`).limit(limit);
-      else if (qPhone) qb = supabase.from('personal_charges').select('*, report_ids').ilike('phone', `%${qPhone}%`).limit(limit);
-      else qb = supabase.from('personal_charges').select('*, report_ids').limit(limit);
-
-      // Discord ID fallback: search reports that reference discord_id
-      if (qDiscordId) {
-        // fetch reports with discord_id and map to citizen_ids
-        const { data: rdata, error: rerr } = await supabase.from('reports').select('citizen_id').ilike('payload::text', `%${qDiscordId}%`).limit(200);
-        if (!rerr && rdata && rdata.length) {
-          const cids = [...new Set(rdata.map(x => x.citizen_id).filter(Boolean))];
-          if (cids.length) {
-            const { data: pc, error: pcerr } = await supabase.from('personal_charges').select('*').in('citizen_id', cids).limit(limit);
-            if (pcerr) throw pcerr;
-            return pc || [];
-          }
-        }
+      if (qNama) {
+        const { data, error } = await supabase
+          .from('personal_charges')
+          .select('*')
+          .ilike('nama', `%${qNama}%`)
+          .order('updated_at', { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+        return data || [];
+      }
+      if (qCitizenId) {
+        const { data, error } = await supabase
+          .from('personal_charges')
+          .select('*')
+          .ilike('citizen_id', `%${qCitizenId}%`)
+          .order('updated_at', { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+        return data || [];
+      }
+      if (qPhone) {
+        const { data, error } = await supabase
+          .from('personal_charges')
+          .select('*')
+          .ilike('phone', `%${qPhone}%`)
+          .order('updated_at', { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+        return data || [];
       }
 
-      const { data, error } = await qb.order('updated_at', { ascending: false });
+      if (qDiscordId) {
+        const { data: rdata, error: rerr } = await supabase
+          .from('reports')
+          .select('citizen_id')
+          .ilike('payload::text', `%${qDiscordId}%`)
+          .limit(200);
+        if (rerr) throw rerr;
+        const cids = [...new Set((rdata || []).map(x => x.citizen_id).filter(Boolean))];
+        if (cids.length) {
+          const { data: pcdata, error: pcerr } = await supabase
+            .from('personal_charges')
+            .select('*')
+            .in('citizen_id', cids)
+            .order('updated_at', { ascending: false })
+            .limit(limit);
+          if (pcerr) throw pcerr;
+          return pcdata || [];
+        }
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('personal_charges')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(limit);
       if (error) throw error;
       return data || [];
     } catch (err) {
