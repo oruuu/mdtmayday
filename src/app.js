@@ -23,6 +23,11 @@ const S = {
   promotionRequests: [],
   currentReport: "PATROLI",
   archiveMonth: new Date().toISOString().slice(0,7),
+  charges: [],
+  chargesLoaded: false,
+  chargesSearch: "",
+  chargesSearchDraft: "",
+  chargesSelected: null,
   loading: false,
   loadingText: "Memuat data WEB...",
   realtimeReady: false,
@@ -48,6 +53,16 @@ const REPORT_TYPES = [
   { id:"KRIMINAL", label:"LAPORAN PENANGKAPAN" },
   { id:"PENYITAAN_KENDARAAN", label:"LAPORAN PENYITAAN KENDARAAN" }
 ];
+
+const CHARGE_STATUS = ["ACTIVE","RELEASED","WANTED","CLEARED"];
+const CHARGE_STATUS_LABEL = {
+  ACTIVE: "ACTIVE",
+  RELEASED: "RELEASED",
+  WANTED: "WANTED",
+  CLEARED: "CLEARED"
+};
+const GENDER_OPTIONS = ["LAKI-LAKI","PEREMPUAN"];
+const CHARGE_SOURCE_STATUSES = ["APPROVED","ARCHIVED"];
 
 const ACTIVITY_CAP_BY_RANK = {
   "CASIS": 20,
@@ -240,9 +255,17 @@ I. Informasi Penahanan.
 
 II. Informasi Tersangka:
 - Nama Tersangka             : ${p.suspect_name || p.subject_info || "-"}
+- Citizen ID                 : ${p.citizen_id || "-"}
+- Nomor Telepon              : ${p.citizen_phone || "-"}
+- Discord ID                 : ${p.citizen_discord_id || "-"}
+- Alamat                     : ${p.citizen_address || "-"}
+- Tanggal Lahir               : ${p.citizen_dob || "-"}
+- Jenis Kelamin              : ${p.citizen_gender || "-"}
+- Pekerjaan                  : ${p.citizen_job || "-"}
 - Pasal                      : ${p.law || "-"}
 - Denda                      : ${p.fine || "-"}
 - Hukuman/Masa Tahanan       : ${p.sentence || p.duration || "-"}
+- Status Riwayat Kriminal    : ${CHARGE_STATUS_LABEL[p.charge_status] || p.charge_status || "ACTIVE"}
 
 III. Identitas Petugas yang Menahan.
 - Nama Petugas               : ${r.nama || "-"}
@@ -380,322 +403,6 @@ async function grantReportActivityPoints(report){
     await addActivityPoint(id, `REPORT_${report.id}_${report.type}_APPROVED`, amount);
   }
 }
-// ===============================
-//   PERSONAL CHARGES SERVICE
-// ===============================
-const PersonalChargesService = {
-  async search({ qNama, qCitizenId, qPhone, qDiscordId, limit = 20 } = {}) {
-    try {
-      if (qNama) {
-        const { data, error } = await supabase
-          .from("personal_charges")
-          .select("*")
-          .ilike("nama", `%${qNama}%`)
-          .order("updated_at", { ascending: false })
-          .limit(limit);
-        if (error) throw error;
-        return data || [];
-      }
-      if (qCitizenId) {
-        const { data, error } = await supabase
-          .from("personal_charges")
-          .select("*")
-          .ilike("citizen_id", `%${qCitizenId}%`)
-          .order("updated_at", { ascending: false })
-          .limit(limit);
-        if (error) throw error;
-        return data || [];
-      }
-      if (qPhone) {
-        const { data, error } = await supabase
-          .from("personal_charges")
-          .select("*")
-          .ilike("phone", `%${qPhone}%`)
-          .order("updated_at", { ascending: false })
-          .limit(limit);
-        if (error) throw error;
-        return data || [];
-      }
-
-      if (qDiscordId) {
-        const { data: rdata, error: rerr } = await supabase
-          .from("reports")
-          .select("citizen_id")
-          .ilike("payload::text", `%${qDiscordId}%`)
-          .limit(200);
-        if (rerr) throw rerr;
-        const cids = [...new Set((rdata || []).map(x => x.citizen_id).filter(Boolean))];
-        if (cids.length) {
-          const { data: pcdata, error: pcerr } = await supabase
-            .from("personal_charges")
-            .select("*")
-            .in("citizen_id", cids)
-            .order("updated_at", { ascending: false })
-            .limit(limit);
-          if (pcerr) throw pcerr;
-          return pcdata || [];
-        }
-        return [];
-      }
-
-      const { data, error } = await supabase
-        .from("personal_charges")
-        .select("*")
-        .order("updated_at", { ascending: false })
-        .limit(limit);
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error("search error", err);
-      throw err;
-    }
-  },
-
-  async getDetails(citizen_id) {
-    const { data: pcData, error: pcError } = await supabase
-      .from("personal_charges")
-      .select("*")
-      .eq("citizen_id", citizen_id)
-      .maybeSingle();
-
-    if (pcError) {
-      console.error("getDetails pc error", pcError);
-      throw pcError;
-    }
-
-    let reports = [];
-    try {
-      if (pcData && pcData.report_ids && Array.isArray(pcData.report_ids) && pcData.report_ids.length) {
-        const ids = pcData.report_ids;
-        const { data: r, error: rErr } = await supabase
-          .from("reports")
-          .select("*")
-          .in("id", ids)
-          .order("created_at", { ascending: false });
-        if (rErr) console.warn("getDetails reports fetch warn", rErr);
-        else reports = r || [];
-      } else {
-        const { data: r2, error: r2Err } = await supabase
-          .from("reports")
-          .select("*")
-          .eq("citizen_id", citizen_id)
-          .order("created_at", { ascending: false });
-        if (r2Err) console.warn("getDetails fallback reports fetch warn", r2Err);
-        else reports = r2 || [];
-      }
-    } catch (e) {
-      console.warn("getDetails reports fetch exception", e);
-    }
-
-    return { personal: pcData, reports };
-  }
-};
-
-let pcSearchTimeout = null;
-function debouncePC(fn, ms = 300){
-  if(pcSearchTimeout) clearTimeout(pcSearchTimeout);
-  pcSearchTimeout = setTimeout(fn, ms);
-}
-
-function personalChargesPage(){
-  return `<main class="app">
-    ${top("PERSONAL CHARGES")}
-    <main class="page">
-      <section class="card">
-        <div class="section-head">
-          <div>
-            <h2>PERSONAL CHARGES</h2>
-            <p class="mini">Riwayat kriminal warga (berdasarkan Arrest Reports yang disetujui)</p>
-          </div>
-        </div>
-
-        <div class="pc-search">
-          <div class="pc-search-row">
-            <input id="pc_q_nama" class="pc-input" placeholder="Nama IC (realtime search)" />
-            <input id="pc_q_citizen" class="pc-input" placeholder="Citizen ID" />
-            <input id="pc_q_phone" class="pc-input" placeholder="Nomor Telepon" />
-            <input id="pc_q_discord" class="pc-input" placeholder="Discord ID" />
-            <button id="pc_search_btn" class="btn small blue">CARI</button>
-          </div>
-        </div>
-
-        <div id="pc_results" class="pc-results">
-          <div class="pc-cards" id="pc_cards_container"></div>
-        </div>
-      </section>
-    </main>${nav()}
-  </main>`;
-}
-
-function escapeIdPC(s){ return String(s || "").replace(/[^a-z0-9_-]/gi, "_"); }
-
-function pcBadgeFor(status){
-  if(!status) return `<span class="badge badge-unknown">UNKNOWN</span>`;
-  const s = String(status).toUpperCase();
-  switch(s){
-    case "ACTIVE": return `<span class="badge badge-active">ACTIVE</span>`;
-    case "RELEASED": return `<span class="badge badge-released">RELEASED</span>`;
-    case "WANTED": return `<span class="badge badge-wanted">WANTED</span>`;
-    case "CLEARED": return `<span class="badge badge-cleared">CLEARED</span>`;
-    default: return `<span class="badge">${e(status)}</span>`;
-  }
-}
-
-function pcCardFor(it){
-  const statusBadge = pcBadgeFor(it.last_status);
-  const photo = it.photo_url ? `<img src="${e(it.photo_url)}" alt="foto" class="pc-photo">` : `<div class="pc-photo placeholder">No Photo</div>`;
-  return `
-    <div class="pc-card">
-      <div class="pc-card-left">${photo}</div>
-      <div class="pc-card-body">
-        <div class="pc-card-title">${e(it.nama || "-")}</div>
-        <div class="pc-card-meta">Citizen ID: ${e(it.citizen_id || "-")} • Tel: ${e(it.phone || "-")}</div>
-        <div class="pc-card-stats">
-          <span class="pc-stat">Penangkapan: <strong>${it.arrests_count || 0}</strong></span>
-          <span class="pc-stat">Kasus: <strong>${it.cases_count || 0}</strong></span>
-          <span class="pc-stat">Terakhir: <strong>${it.last_arrest_at ? new Date(it.last_arrest_at).toLocaleString("id-ID") : "-"}</strong></span>
-          <span class="pc-badge">${statusBadge}</span>
-        </div>
-        <div class="pc-card-actions"><button id="pc_detail_${escapeIdPC(it.citizen_id)}" class="btn small">Lihat Detail</button></div>
-      </div>
-    </div>
-  `;
-}
-
-function pcRenderSearchResults(items){
-  const container = document.getElementById("pc_cards_container");
-  if(!container) return;
-  if(!items || items.length === 0){
-    container.innerHTML = `<div class="empty">Tidak ada hasil.</div>`;
-    return;
-  }
-
-  container.innerHTML = items.map(it => pcCardFor(it)).join("\n");
-
-  items.forEach(it => {
-    const el = document.getElementById(`pc_detail_${escapeIdPC(it.citizen_id)}`);
-    if(el) el.addEventListener("click", async () => { await pcShowDetails(it.citizen_id); });
-  });
-}
-
-async function pcShowDetails(citizen_id){
-  const existing = document.getElementById("pc_detail_modal");
-  if(existing) existing.remove();
-
-  const modal = document.createElement("div");
-  modal.id = "pc_detail_modal";
-  modal.className = "pc-modal";
-  modal.style.zIndex = 9999;
-  modal.innerHTML = `<div class="pc-modal-panel"><button class="pc-modal-close" id="pc_modal_close">&times;</button><div id="pc_modal_content"><div class="mini">Memuat detail...</div></div></div>`;
-  document.body.appendChild(modal);
-
-  document.getElementById("pc_modal_close").addEventListener("click", () => modal.remove());
-  modal.addEventListener("click", (evt) => {
-    if(evt.target === modal) modal.remove();
-  });
-
-  try{
-    const { personal, reports } = await PersonalChargesService.getDetails(citizen_id);
-    const content = document.getElementById("pc_modal_content");
-    const p = personal || {};
-
-    const rowsHtml = (reports || []).map(r => {
-      const payload = r.payload || {};
-      const law = payload.law || payload.pasal || "-";
-      const sentence = payload.sentence || payload.duration || "-";
-      const fine = payload.fine || "-";
-      const evidence = (r.evidence_urls || r.evidence_url) ? (Array.isArray(r.evidence_urls) ? r.evidence_urls.length + " file" : "1 file") : "-";
-      return `<tr>
-        <td>${e(r.id)}</td>
-        <td>${r.created_at ? fmt(r.created_at) : "-"}</td>
-        <td>${e(r.nama || r.approved_by || "-")}</td>
-        <td>${e(law)}</td>
-        <td>${e(sentence)}</td>
-        <td>${e(fine)}</td>
-        <td>${e(evidence)}</td>
-        <td>${pcBadgeFor(r.status)}</td>
-        <td>${e(r.approval_note || r.reject_reason || r.payload?.summary || r.payload?.chronology || "-")}</td>
-      </tr>`;
-    }).join("");
-
-    const html = `
-      <div class="pc-detail">
-        <div class="pc-detail-header">
-          <div class="pc-detail-photo">${p.photo_url ? `<img src="${e(p.photo_url)}" style="width:140px;height:140px;object-fit:cover;border-radius:8px"/>` : '<div style="width:140px;height:140px;border-radius:8px;background:#f3f4f6;display:flex;align-items:center;justify-content:center">No Photo</div>'}</div>
-          <div class="pc-detail-info">
-            <h3 style="margin-top:0">${e(p.nama || "-")}</h3>
-            <div><span class="pc-label">Citizen ID</span><strong>${e(p.citizen_id || "-")}</strong></div>
-            <div><span class="pc-label">Phone</span>${e(p.phone || "-")}</div>
-            <div><span class="pc-label">Alamat</span>${e(p.address || "-")}</div>
-            <div><span class="pc-label">Jenis Kelamin</span>${e(p.gender || "-")}</div>
-            <div><span class="pc-label">Tanggal Lahir</span>${p.birth_date ? new Date(p.birth_date).toLocaleDateString("id-ID") : "-"}</div>
-            <div><span class="pc-label">Pekerjaan</span>${e(p.job || "-")}</div>
-            <div><span class="pc-label">Penangkapan</span><strong>${p.arrests_count || 0}</strong></div>
-            <div><span class="pc-label">Kasus</span><strong>${p.cases_count || 0}</strong></div>
-            <div><span class="pc-label">Status</span>${pcBadgeFor(p.last_status)}</div>
-            <div><span class="pc-label">Terakhir Ditangkap</span>${p.last_arrest_at ? fmt(p.last_arrest_at) : "-"}</div>
-          </div>
-        </div>
-
-        <div style="margin-top:14px">
-          <h4>Riwayat Kriminal</h4>
-          <div class="pc-table-wrap">
-            <table class="pc-table">
-              <thead><tr>
-                <th>Nomor Laporan</th><th>Tanggal</th><th>Petugas</th><th>Pasal</th><th>Hukuman</th><th>Denda</th><th>Barang Bukti</th><th>Status</th><th>Catatan</th>
-              </tr></thead>
-              <tbody>
-                ${rowsHtml || '<tr><td colspan="9" class="empty">Belum ada riwayat kriminal.</td></tr>'}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div style="margin-top:12px;text-align:right"><button class="btn" id="pc_modal_close_btn">TUTUP</button></div>
-      </div>
-    `;
-
-    content.innerHTML = html;
-    document.getElementById("pc_modal_close_btn").addEventListener("click", () => modal.remove());
-    document.getElementById("pc_modal_close").addEventListener("click", () => modal.remove());
-  }catch(err){
-    const content = document.getElementById("pc_modal_content");
-    content.innerHTML = `<div class="error">Tidak dapat memuat detail: ${e(err.message || err)}</div>`;
-  }
-}
-
-function mountPersonalCharges(){
-  const btn = document.getElementById("pc_search_btn");
-  const inputs = ["pc_q_nama","pc_q_citizen","pc_q_phone","pc_q_discord"].map(id => document.getElementById(id));
-
-  async function doSearch(){
-    const qNama = document.getElementById("pc_q_nama")?.value.trim() || "";
-    const qCitizen = document.getElementById("pc_q_citizen")?.value.trim() || "";
-    const qPhone = document.getElementById("pc_q_phone")?.value.trim() || "";
-    const qDiscord = document.getElementById("pc_q_discord")?.value.trim() || "";
-
-    const payload = { qNama, qCitizenId: qCitizen, qPhone, qDiscordId: qDiscord };
-
-    debouncePC(async () => {
-      try{
-        const container = document.getElementById("pc_cards_container");
-        if(container) container.innerHTML = `<div class="mini">Mencari...</div>`;
-        const items = await PersonalChargesService.search(payload);
-        pcRenderSearchResults(items);
-      }catch(err){
-        console.error("Search error", err);
-        const container = document.getElementById("pc_cards_container");
-        if(container) container.innerHTML = `<div class="error">Terjadi kesalahan saat mencari</div>`;
-      }
-    }, 300);
-  }
-
-  inputs.forEach(i => i && i.addEventListener("input", doSearch));
-  btn && btn.addEventListener("click", doSearch);
-
-  const container = document.getElementById("pc_cards_container");
-  if(container) container.innerHTML = `<div class="mini">Gunakan kotak pencarian untuk menemukan warga.</div>`;
-}
 
 const HIGH = ["PATI","SUPER ADMIN"];
 const MAN = ["PATI","SUPER ADMIN"];
@@ -714,6 +421,31 @@ const high = () => can(HIGH);
 const admin = () => can(MAN);
 const canApproveAttendance = () => can(ATTENDANCE_APPROVER);
 const propam = () => S.profile?.divisi === "BIDPROPAM" || can(["PATI","SUPER ADMIN"]);
+
+// Role Based Menu: satu sumber kebenaran untuk siapa boleh buka halaman apa.
+// Dipakai oleh nav()/sidebar() (supaya menu yang tidak diizinkan tidak dirender)
+// dan oleh go()/render() (supaya S.page tidak bisa dipaksa lewat console/URL).
+const PAGE_ACCESS = {
+  dashboard: () => true,
+  attendance: () => true,
+  log: () => true,
+  reports: () => true,
+  members: () => true,
+  charges: () => true,
+  propam: () => propam(),
+  payroll: () => true,
+  leaderboard: () => high(),
+  admin: () => admin()
+};
+
+function canAccessPage(page){
+  const rule = PAGE_ACCESS[page];
+  return typeof rule === "function" ? !!rule() : false;
+}
+
+function safePage(page){
+  return canAccessPage(page) ? page : "dashboard";
+}
 function fmt(d){
   if(!d) return "-";
   return new Date(d).toLocaleString("id-ID", {
@@ -857,7 +589,7 @@ function canDeleteMember(){
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function pageTitle(page = S.page){
-  const map = { dashboard, attendance:attendancePage, reports:reportsPage, members:membersPage, propam:propamPage, log:logPage, payroll:payrollPage, leaderboard:leaderboardPage, admin:adminPage, charges:personalChargesPage };
+  const map = { dashboard:"Dashboard", attendance:"Absensi", log:"Activity Log", reports:"Laporan", propam:"Propam", payroll:"Payroll", admin:"Admin Panel", members:"Data Personel", charges:"Personal Charges", leaderboard:"Leaderboard" };
   return map[page] || "Mayday WEB";
 }
 
@@ -896,7 +628,7 @@ async function withLoading(text, fn){
 }
 function sidebar(){
   if(!S.profile || S.profile.status !== "ACTIVE") return "";
-  const items = [["dashboard","🏠","Dashboard"],["attendance","📋","Absensi"],["log","↺","Activity Log"],["reports","📄","Laporan"],["members","👮","Personel"],["propam","⚖️","Propam"],["payroll","💵","Payroll"],["charges","🚔","Charges"],...(high() ? [["leaderboard","🏆","Leaderboard"],["admin","⚙","Admin"]] : [])];
+  const items = [["dashboard","🏠","Dashboard"],["attendance","📋","Absensi"],["log","↺","Activity Log"],["reports","📄","Laporan"],["members","👮","Personel"],["charges","🗂️","Personal Charges"],["propam","⚖️","Propam"],["payroll","💵","Payroll"],["leaderboard","🏆","Leaderboard"],["admin","⚙","Admin"]].filter(([id]) => canAccessPage(id));
   return `<aside class="sidebar"><div class="sidebar-brand"><img src="/logo.png"/><div><b>POLICE MAYDAY</b><span>Command Center</span></div></div><div class="sidebar-user"><img src="${e(S.profile.avatar_url || "/logo.png")}"/><div><b>${e(userDisplayName())}</b><span>${e(S.profile.rank_detail || S.profile.jabatan || "-")} • ${e(S.profile.divisi || "-")}</span></div></div><nav class="sidebar-nav">${items.map(([id,ic,tx])=>`<button class="${S.page===id ? "active" : ""}" onclick="go('${id}')"><span>${ic}</span>${tx}</button>`).join("")}</nav><div class="sidebar-footer"><button class="theme-toggle" onclick="toggleTheme()">${S.theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode"}</button><button class="theme-toggle" onclick="syncDiscord()">Sync Discord</button><button class="theme-toggle danger" onclick="logout()">Logout</button></div></aside>`;
 }
 function shell(content){
@@ -1089,17 +821,17 @@ function top(title){
 
 function nav(){
   const items = [
-  ["dashboard","🏠","HOME"],
-  ["attendance","📋","ABSENSI"],
-  ["log","↺","LOG"],
-  ["reports","📄","LAPORAN"],
-  ["members","👮","PERSONEL"],
-  ["propam","⚖️","PROPAM"],
-  ["payroll","💵","GAJI"],
-  ["charges","🚔","CHARGES"],
-  ...(high() ? [["leaderboard","🏆","RANK"]] : []),
-  ["admin","⚙","ADMIN"]
-];
+    ["dashboard","🏠","HOME"],
+    ["attendance","📋","ABSENSI"],
+    ["log","↺","LOG"],
+    ["reports","📄","LAPORAN"],
+    ["members","👮","PERSONEL"],
+    ["charges","🗂️","CHARGES"],
+    ["propam","⚖️","PROPAM"],
+    ["payroll","💵","GAJI"],
+    ["leaderboard","🏆","RANK"],
+    ["admin","⚙","ADMIN"]
+  ].filter(([id]) => canAccessPage(id));
 
   return `<nav class="nav nav-seven">${items.map(([id,ic,tx]) => `
     <button class="${S.page===id ? "active" : ""}" onclick="go('${id}')">
@@ -1109,6 +841,10 @@ function nav(){
 }
 
 function go(page){
+  if(!canAccessPage(page)){
+    toast("Kamu tidak punya izin membuka menu itu.", "error");
+    page = "dashboard";
+  }
   S.formDirty = false;
   S.loading = true;
   S.loadingText = `Membuka ${pageTitle(page)}...`;
@@ -1120,6 +856,7 @@ function go(page){
     else if(page === "members") S.tab = "list";
     else if(page === "leaderboard") S.tab = "duty";
     else S.tab = "today";
+    if(page === "charges" && !S.chargesLoaded) loadPersonalCharges();
     S.loading = false;
     render();
   }, 1000);
@@ -1140,7 +877,7 @@ function markFormDirty(v = true){
 }
 
 function shouldBlockAutoReload(){
-  const noAutoRefreshPages = ["attendance","reports","payroll","propam"];
+  const noAutoRefreshPages = ["attendance","reports","payroll","propam","charges"];
 
   return (
     S.loading ||
@@ -1369,15 +1106,14 @@ function dashboard(){
       </div>
 
       <section class="grid">
-  <button class="tile" onclick="go('attendance')"><div class="icon">📋</div>ABSENSI<small>Input / ACC absensi</small></button>
-  <button class="tile" onclick="go('reports')"><div class="icon">📄</div>LAPORAN<small>OPS & export PDF</small></button>
-  <button class="tile" onclick="go('members')"><div class="icon">👮</div>PERSONEL<small>Online / search / riwayat</small></button>
-  <button class="tile" onclick="go('propam')"><div class="icon">⚖️</div>PROPAM<small>SP / PTDH</small></button>
-  <button class="tile" onclick="go('payroll')"><div class="icon">💵</div>PAYROLL<small>Pengajuan gaji</small></button>
-  <button class="tile" onclick="go('log')"><div class="icon">↺</div>LOG<small>Activity log</small></button>
-  <button class="tile" onclick="go('charges')"><div class="icon">🚔</div>CHARGES<small>Riwayat kriminal</small></button>
-  ${high() ? `<button class="tile" onclick="go('leaderboard')"><div class="icon">🏆</div>LEADERBOARD<small>Payroll & activity</small></button><button class="tile" onclick="go('admin')"><div class="icon">⚙</div>ADMIN<small>Panel petinggi</small></button>` : ""}
-</section>
+        <button class="tile" onclick="go('attendance')"><div class="icon">📋</div>ABSENSI<small>Input / ACC absensi</small></button>
+        <button class="tile" onclick="go('reports')"><div class="icon">📄</div>LAPORAN<small>OPS & export PDF</small></button>
+        <button class="tile" onclick="go('members')"><div class="icon">👮</div>PERSONEL<small>Online / search / riwayat</small></button>
+        <button class="tile" onclick="go('propam')"><div class="icon">⚖️</div>PROPAM<small>SP / PTDH</small></button>
+        <button class="tile" onclick="go('payroll')"><div class="icon">💵</div>PAYROLL<small>Pengajuan gaji</small></button>
+        <button class="tile" onclick="go('log')"><div class="icon">↺</div>LOG<small>Activity log</small></button>
+        ${high() ? `<button class="tile" onclick="go('leaderboard')"><div class="icon">🏆</div>LEADERBOARD<small>Payroll & activity</small></button><button class="tile" onclick="go('admin')"><div class="icon">⚙</div>ADMIN<small>Panel petinggi</small></button>` : ""}
+      </section>
 
       ${activityProgressCard()}
       ${commandStatsCard()}
@@ -1521,7 +1257,7 @@ function setupRealtimeWeb(){
   if(S.realtimeReady) return;
   S.realtimeReady = true;
 
-  const noAutoRefreshPages = ["attendance","reports","payroll","propam"];
+  const noAutoRefreshPages = ["attendance","reports","payroll","propam","charges"];
 
   const reloadPersonnelSlow = async () => {
     if(noAutoRefreshPages.includes(S.page)) return;
@@ -2120,12 +1856,31 @@ function reportForm(edit = null){
       <div class="field"><label>Deskripsi Singkat</label><textarea id="rep_summary">${e(payload.summary || payload.chronology || "")}</textarea></div>
 
       <h3>II. Informasi Tersangka</h3>
-      <div class="field"><label>Nama Tersangka</label><input id="rep_suspect_name" placeholder="Nama lengkap tersangka" value="${e(payload.suspect_name || payload.subject_info || "")}"/></div>
+      <div class="field"><label>Nama Tersangka (Nama IC)</label><input id="rep_suspect_name" placeholder="Nama lengkap tersangka" value="${e(payload.suspect_name || payload.subject_info || "")}"/></div>
+      <div class="row">
+        <div class="field"><label>Citizen ID</label><input id="rep_citizen_id" placeholder="Contoh: CIT-0001" value="${e(payload.citizen_id || "")}"/></div>
+        <div class="field"><label>Nomor Telepon</label><input id="rep_citizen_phone" placeholder="Contoh: 555-0100" value="${e(payload.citizen_phone || "")}"/></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Discord ID</label><input id="rep_citizen_discord_id" placeholder="Discord ID tersangka (jika ada)" value="${e(payload.citizen_discord_id || "")}"/></div>
+        <div class="field"><label>Tanggal Lahir</label><input id="rep_citizen_dob" type="date" value="${e(payload.citizen_dob || "")}"/></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Jenis Kelamin</label><select id="rep_citizen_gender">
+          <option value="" ${!payload.citizen_gender ? "selected" : ""}>PILIH</option>
+          ${GENDER_OPTIONS.map(g => `<option value="${e(g)}" ${payload.citizen_gender === g ? "selected" : ""}>${e(g)}</option>`).join("")}
+        </select></div>
+        <div class="field"><label>Pekerjaan</label><input id="rep_citizen_job" placeholder="Contoh: Pengangguran / Wiraswasta" value="${e(payload.citizen_job || "")}"/></div>
+      </div>
+      <div class="field"><label>Alamat</label><input id="rep_citizen_address" placeholder="Alamat tempat tinggal" value="${e(payload.citizen_address || "")}"/></div>
       <div class="row">
         <div class="field"><label>Pasal</label><input id="rep_law" placeholder="Masukkan pasal" value="${e(payload.law || "")}"/></div>
         <div class="field"><label>Denda</label><input id="rep_fine" placeholder="Contoh: 50000" value="${e(payload.fine || "")}"/></div>
       </div>
       <div class="field"><label>Hukuman / Masa Tahanan</label><input id="rep_sentence" placeholder="Contoh: 60 menit" value="${e(payload.sentence || payload.duration || "")}"/></div>
+      <div class="field"><label>Status Riwayat Kriminal</label><select id="rep_charge_status">
+        ${CHARGE_STATUS.map(s => `<option value="${e(s)}" ${(payload.charge_status || "ACTIVE") === s ? "selected" : ""}>${e(CHARGE_STATUS_LABEL[s])}</option>`).join("")}
+      </select></div>
 
       <h3>III. Identitas Petugas</h3>
       <div class="field"><label>Rekan Petugas</label><select id="rep_colleagues" multiple size="7">${reportColleagueOptions(payload.colleagues || [])}</select></div>
@@ -2133,6 +1888,7 @@ function reportForm(edit = null){
       <h3>IV. Barang Bukti</h3>
       <div class="field"><label>Jenis Barang Bukti</label><input id="rep_evidence_type" placeholder="Contoh: Senjata tajam / Narkotika / Uang tunai" value="${e(payload.evidence_type || "")}"/></div>
       <div class="field"><label>Keterangan Barang Bukti</label><textarea id="rep_evidence_desc">${e(payload.evidence_desc || "")}</textarea></div>
+      <div class="field"><label>Foto Wajah / KTP Tersangka (untuk Personal Charges)</label><input id="rep_citizen_photo" type="file" accept="image/*"/></div>
       <div class="field"><label>Bukti KTP & Barang Bukti Minimal 1 Foto</label><input id="rep_file" type="file" accept="image/*" multiple/></div>
     ` : `
       <div class="row">
@@ -2233,6 +1989,9 @@ async function submitReport(){
       if(!payload.area.trim()) return alert("Area patroli wajib diisi.");
       if(!payload.chronology.trim()) return alert("Laporan singkat patroli wajib diisi.");
     } else if(isArrest){
+      const citizenPhotoFile = document.querySelector("#rep_citizen_photo")?.files?.[0] || null;
+      const citizenPhotoUrl = citizenPhotoFile ? await uploadOne(citizenPhotoFile, "citizens") : "";
+
       payload = {
         ...payload,
         report_time: document.querySelector("#rep_time")?.value || "",
@@ -2241,6 +2000,15 @@ async function submitReport(){
         summary: document.querySelector("#rep_summary")?.value || "",
         suspect_name: document.querySelector("#rep_suspect_name")?.value || "",
         subject_info: document.querySelector("#rep_suspect_name")?.value || "",
+        citizen_id: document.querySelector("#rep_citizen_id")?.value || "",
+        citizen_phone: document.querySelector("#rep_citizen_phone")?.value || "",
+        citizen_discord_id: document.querySelector("#rep_citizen_discord_id")?.value || "",
+        citizen_dob: document.querySelector("#rep_citizen_dob")?.value || "",
+        citizen_gender: document.querySelector("#rep_citizen_gender")?.value || "",
+        citizen_job: document.querySelector("#rep_citizen_job")?.value || "",
+        citizen_address: document.querySelector("#rep_citizen_address")?.value || "",
+        citizen_photo: citizenPhotoUrl,
+        charge_status: document.querySelector("#rep_charge_status")?.value || "ACTIVE",
         law: document.querySelector("#rep_law")?.value || "",
         fine: document.querySelector("#rep_fine")?.value || "",
         sentence: document.querySelector("#rep_sentence")?.value || "",
@@ -2337,6 +2105,9 @@ async function saveReport(id){
       chronology: document.querySelector("#rep_chronology")?.value || ""
     };
   }else if(isArrest){
+    const citizenPhotoFile = document.querySelector("#rep_citizen_photo")?.files?.[0] || null;
+    const citizenPhotoUrl = citizenPhotoFile ? await uploadOne(citizenPhotoFile, "citizens") : (r.payload?.citizen_photo || "");
+
     payload = {
       ...payload,
       report_time: document.querySelector("#rep_time")?.value || "",
@@ -2345,6 +2116,15 @@ async function saveReport(id){
       summary: document.querySelector("#rep_summary")?.value || "",
       suspect_name: document.querySelector("#rep_suspect_name")?.value || "",
       subject_info: document.querySelector("#rep_suspect_name")?.value || "",
+      citizen_id: document.querySelector("#rep_citizen_id")?.value || "",
+      citizen_phone: document.querySelector("#rep_citizen_phone")?.value || "",
+      citizen_discord_id: document.querySelector("#rep_citizen_discord_id")?.value || "",
+      citizen_dob: document.querySelector("#rep_citizen_dob")?.value || "",
+      citizen_gender: document.querySelector("#rep_citizen_gender")?.value || "",
+      citizen_job: document.querySelector("#rep_citizen_job")?.value || "",
+      citizen_address: document.querySelector("#rep_citizen_address")?.value || "",
+      citizen_photo: citizenPhotoUrl,
+      charge_status: document.querySelector("#rep_charge_status")?.value || "ACTIVE",
       law: document.querySelector("#rep_law")?.value || "",
       fine: document.querySelector("#rep_fine")?.value || "",
       sentence: document.querySelector("#rep_sentence")?.value || "",
@@ -3569,30 +3349,257 @@ function blocked(msg){
   </main>`;
 }
 
-const originalRender = render;
+/* ============================================================
+   PERSONAL CHARGES
+   Menu untuk melihat riwayat kriminal warga.
+   Single Source of Truth: Laporan Penangkapan (report.type === "KRIMINAL")
+   berstatus APPROVED atau ARCHIVED. Tidak ada input manual di sini —
+   semua data berasal dari alur Laporan Penangkapan yang sudah di-ACC.
+   ============================================================ */
 
-function render(){
-  originalRender();
-  if(S.page === "charges") setTimeout(() => mountPersonalCharges(), 100);
+async function loadPersonalCharges(){
+  S.loading = true;
+  S.loadingText = "Memuat Personal Charges...";
+  render();
+  try{
+    const { data, error } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("type", "KRIMINAL")
+      .in("status", CHARGE_SOURCE_STATUSES)
+      .order("created_at", { ascending:false })
+      .limit(3000);
+
+    if(error) throw error;
+    S.charges = data || [];
+    S.chargesLoaded = true;
+  }catch(err){
+    toast(`Gagal memuat Personal Charges: ${err.message}`, "error");
+  }finally{
+    S.loading = false;
+    render();
+  }
+}
+
+function citizenKey(payload = {}){
+  const id = String(payload.citizen_id || "").trim().toUpperCase();
+  if(id) return `ID:${id}`;
+  const phone = String(payload.citizen_phone || "").trim();
+  if(phone) return `PHONE:${phone}`;
+  const name = String(payload.suspect_name || payload.subject_info || "").trim().toUpperCase();
+  return `NAME:${name || "TANPA NAMA"}`;
+}
+
+/**
+ * PersonalChargesService (client-side, dijalankan via Supabase langsung sesuai
+ * arsitektur project ini yang tidak memakai backend server terpisah).
+ * Tugas:
+ *  - Mengambil Arrest Report (dilakukan oleh loadPersonalCharges()).
+ *  - Mengelompokkan data berdasarkan warga (citizenKey()).
+ *  - Menghitung jumlah penangkapan & jumlah kasus.
+ *  - Mengambil status terakhir & seluruh riwayat.
+ *  - Mengirim data siap pakai ke chargesPage()/personalChargeList()/personalChargeDetail().
+ */
+function buildPersonalCharges(){
+  const map = new Map();
+
+  for(const r of S.charges){
+    const p = r.payload || {};
+    const key = citizenKey(p);
+
+    if(!map.has(key)){
+      map.set(key, {
+        key,
+        nama_ic: p.suspect_name || p.subject_info || "TANPA NAMA",
+        citizen_id: p.citizen_id || "-",
+        phone: p.citizen_phone || "-",
+        discord_id: p.citizen_discord_id || "-",
+        address: p.citizen_address || "-",
+        dob: p.citizen_dob || "-",
+        gender: p.citizen_gender || "-",
+        job: p.citizen_job || "-",
+        photo: p.citizen_photo || "",
+        last_status: p.charge_status || "ACTIVE",
+        last_arrest_at: r.created_at,
+        _latestAt: r.created_at,
+        history: []
+      });
+    }
+
+    const citizen = map.get(key);
+
+    if(new Date(r.created_at).getTime() >= new Date(citizen._latestAt).getTime()){
+      citizen._latestAt = r.created_at;
+      citizen.nama_ic = p.suspect_name || p.subject_info || citizen.nama_ic;
+      citizen.citizen_id = p.citizen_id || citizen.citizen_id;
+      citizen.phone = p.citizen_phone || citizen.phone;
+      citizen.discord_id = p.citizen_discord_id || citizen.discord_id;
+      citizen.address = p.citizen_address || citizen.address;
+      citizen.dob = p.citizen_dob || citizen.dob;
+      citizen.gender = p.citizen_gender || citizen.gender;
+      citizen.job = p.citizen_job || citizen.job;
+      citizen.photo = p.citizen_photo || citizen.photo;
+      citizen.last_status = p.charge_status || "ACTIVE";
+      citizen.last_arrest_at = r.created_at;
+    }
+
+    citizen.history.push({
+      id: r.id,
+      date: p.arrest_datetime || p.report_date || r.created_at,
+      report_number: `LP-${r.id}`,
+      officer: r.nama,
+      law: p.law || "-",
+      sentence: p.sentence || p.duration || "-",
+      fine: p.fine || "-",
+      evidence: p.evidence_type || "-",
+      status: p.charge_status || "ACTIVE",
+      note: p.evidence_desc || p.summary || "-",
+      created_at: r.created_at
+    });
+  }
+
+  return [...map.values()].map(c => {
+    const history = c.history.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    return {
+      ...c,
+      arrest_count: history.length,
+      case_count: new Set(history.map(h => h.law)).size,
+      history
+    };
+  }).sort((a,b) => new Date(b.last_arrest_at || 0) - new Date(a.last_arrest_at || 0));
+}
+
+function filteredPersonalCharges(){
+  const list = buildPersonalCharges();
+  const q = String(S.chargesSearch || "").trim().toLowerCase();
+  if(!q) return list;
+  return list.filter(c =>
+    String(c.nama_ic).toLowerCase().includes(q) ||
+    String(c.citizen_id).toLowerCase().includes(q) ||
+    String(c.phone).toLowerCase().includes(q) ||
+    String(c.discord_id).toLowerCase().includes(q)
+  );
+}
+
+function setChargesSearch(v){
+  const el = document.querySelector("#charges_search");
+  const cursor = el ? el.selectionStart : null;
+  S.chargesSearch = v || "";
+  S.chargesSearchDraft = S.chargesSearch;
+  render();
+  const el2 = document.querySelector("#charges_search");
+  if(el2){
+    el2.focus();
+    if(cursor !== null) el2.setSelectionRange(cursor, cursor);
+  }
+}
+
+function openCharge(key){
+  S.chargesSelected = key;
+  render();
+}
+
+function closeCharge(){
+  S.chargesSelected = null;
+  render();
+}
+
+function chargeStatusBadge(status){
+  const st = CHARGE_STATUS.includes(status) ? status : "ACTIVE";
+  return `<span class="status charge-status charge-${e(st)}">${e(CHARGE_STATUS_LABEL[st] || st)}</span>`;
+}
+
+function chargesPage(){
+  const list = filteredPersonalCharges();
+  const all = S.chargesSelected ? buildPersonalCharges() : list;
+  const selected = S.chargesSelected ? all.find(c => c.key === S.chargesSelected) : null;
+
+  return `<main class="app">
+    ${top("PERSONAL CHARGES")}
+    <main class="page charges-page">
+      <section class="card charges-search-card">
+        <h2>PERSONAL CHARGES</h2>
+        <p class="mini">Riwayat kriminal warga, diambil otomatis dari Laporan Penangkapan yang sudah di-ACC (Single Source of Truth).</p>
+        <div class="charges-search-bar">
+          <input id="charges_search" placeholder="Cari Nama IC / Citizen ID / Nomor Telepon / Discord ID..." value="${e(S.chargesSearchDraft || S.chargesSearch || "")}" oninput="setChargesSearch(this.value)"/>
+          ${S.chargesSearch ? `<button class="btn small" onclick="setChargesSearch('')">RESET</button>` : ""}
+        </div>
+      </section>
+
+      ${selected ? personalChargeDetail(selected) : personalChargeList(list)}
+    </main>${nav()}
+  </main>`;
+}
+
+function personalChargeList(list){
+  if(!S.chargesLoaded){
+    return `<section class="card"><div class="empty">Memuat data warga...</div></section>`;
+  }
+  if(!list.length){
+    return `<section class="card"><div class="empty">${S.chargesSearch ? "Tidak ada warga yang cocok dengan pencarian." : "Belum ada riwayat kriminal warga."}</div></section>`;
+  }
+  return `<section class="card charges-grid">
+    ${list.map(c => `
+      <button class="charge-card" onclick="openCharge('${e(c.key)}')">
+        <img class="charge-photo" src="${e(c.photo || "/logo.png")}" onerror="this.src='/logo.png'"/>
+        <div class="charge-card-body">
+          <h3>${e(c.nama_ic)}</h3>
+          <div class="mini">Citizen ID: ${e(c.citizen_id)}</div>
+          <div class="mini">${e(c.phone)} • ${e(c.discord_id)}</div>
+          <div class="charge-card-stats"><span>${c.arrest_count} Penangkapan</span><span>${c.case_count} Kasus</span></div>
+          ${chargeStatusBadge(c.last_status)}
+        </div>
+      </button>
+    `).join("")}
+  </section>`;
+}
+
+function personalChargeDetail(c){
+  return `<section class="card charge-detail">
+    <button class="btn small" onclick="closeCharge()">← KEMBALI KE PENCARIAN</button>
+
+    <div class="charge-detail-head">
+      <img class="charge-photo big" src="${e(c.photo || "/logo.png")}" onerror="this.src='/logo.png'"/>
+      <div>
+        <h2>${e(c.nama_ic)}</h2>
+        ${chargeStatusBadge(c.last_status)}
+        <div class="kv">
+          <div><small>CITIZEN ID</small><strong>${e(c.citizen_id)}</strong></div>
+          <div><small>NOMOR TELEPON</small><strong>${e(c.phone)}</strong></div>
+          <div><small>DISCORD ID</small><strong>${e(c.discord_id)}</strong></div>
+          <div><small>ALAMAT</small><strong>${e(c.address)}</strong></div>
+          <div><small>TANGGAL LAHIR</small><strong>${e(c.dob)}</strong></div>
+          <div><small>JENIS KELAMIN</small><strong>${e(c.gender)}</strong></div>
+          <div><small>PEKERJAAN</small><strong>${e(c.job)}</strong></div>
+          <div><small>JUMLAH PENANGKAPAN</small><strong>${c.arrest_count}</strong></div>
+          <div><small>JUMLAH KASUS</small><strong>${c.case_count}</strong></div>
+          <div><small>PENANGKAPAN TERAKHIR</small><strong>${fmt(c.last_arrest_at)}</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>RIWAYAT KRIMINAL</h3>
+    <div class="charge-history">
+      ${c.history.map(h => `
+        <div class="list-item charge-history-item">
+          <div class="mini">${fmt(h.date)} • ${e(h.report_number)} • Petugas: ${e(h.officer)}</div>
+          <div><b>Pasal:</b> ${e(h.law)}</div>
+          <div><b>Hukuman:</b> ${e(h.sentence)} • <b>Denda:</b> ${e(h.fine)}</div>
+          <div><b>Barang Bukti:</b> ${e(h.evidence)}</div>
+          <div><b>Catatan:</b> ${e(h.note)}</div>
+          ${chargeStatusBadge(h.status)}
+        </div>
+      `).join("") || `<div class="empty">Belum ada riwayat.</div>`}
+    </div>
+  </section>`;
 }
 
 function render(){
   if(!S.user){ app.innerHTML = loginPage() + loadingOverlay(); drawToasts(); return; }
   if(!S.profile){ app.innerHTML = skeletonPage("MEMUAT PROFIL") + loadingOverlay(); drawToasts(); return; }
   if(S.profile?.status !== "ACTIVE" && S.profile?.jabatan !== "SUPER ADMIN"){ app.innerHTML = pending() + loadingOverlay(); drawToasts(); return; }
-
-  const map = {
-    dashboard,
-    attendance: attendancePage,
-    reports: reportsPage,
-    members: membersPage,
-    propam: propamPage,
-    log: logPage,
-    payroll: payrollPage,
-    leaderboard: leaderboardPage,
-    admin: adminPage
-  };
-
+  S.page = safePage(S.page); // Role Based Menu: cegah page dipaksa lewat console/manipulasi state
+  const map = { dashboard, attendance:attendancePage, reports:reportsPage, members:membersPage, charges:chargesPage, propam:propamPage, log:logPage, payroll:payrollPage, leaderboard:leaderboardPage, admin:adminPage };
   const content = (map[S.page] || dashboard)();
   app.innerHTML = shell(content);
   drawToasts();
@@ -3655,7 +3662,9 @@ Object.assign(window, {
   setPayrollResearchPeriod,
   recalcPayrollResearchRates,
   monthKey,
-  mountPersonalCharges
+  setChargesSearch,
+  openCharge,
+  closeCharge
 });
 
 init().catch(err => {
