@@ -2457,379 +2457,280 @@ html[data-theme="dark"] .log-table tr{
   background:rgba(15,23,42,.92)!important;
 }
 
-.pc-search {
-  display: grid;
-  gap: 12px;
-  margin: 14px 0;
+/* ============================================================
+   MAYDAY MDT V3.5 - UI CONSISTENCY PATCH + PERSONAL CHARGES
+   Ditambahkan di paling bawah style.css supaya jadi aturan
+   terakhir yang menang di cascade. Tidak mengubah warna/identitas
+   dasar (--blue/--teal/--yellow/--rose/--sidebar tetap sama),
+   hanya merapikan spacing, konsistensi komponen, dan menambah
+   style untuk halaman Personal Charges yang baru.
+   ============================================================ */
+
+/* ---------- Konsistensi spacing & radius global ---------- */
+.card,
+.tile,
+.list-item{
+  border-radius:var(--radius, 12px)!important;
 }
 
-.pc-search-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr auto;
-  gap: 10px;
-  align-items: end;
+.btn,
+.field input,
+.field select,
+.field textarea,
+.member-search-panel input,
+.charges-search-bar input{
+  border-radius:var(--radius-sm, 10px)!important;
 }
 
-.pc-input {
-  border: 1px solid rgba(18,24,39,.18);
-  border-radius: 8px;
-  padding: 12px;
-  background: linear-gradient(180deg,#fff,#f8fafc);
-  box-shadow: 0 6px 18px rgba(15,23,42,.06);
-  font-size: 13px;
+.status,
+.badge{
+  border-radius:999px!important;
 }
 
-.pc-input:focus {
-  border-color: #315fcb;
-  box-shadow: 0 0 0 4px rgba(49,95,203,.14);
-  outline: none;
+.card{
+  padding:18px;
+  margin-bottom:16px;
 }
 
-.pc-results {
-  margin-top: 12px;
+.card h2{
+  margin-top:0;
+  letter-spacing:.02em;
 }
 
-.pc-cards {
-  display: grid;
-  gap: 12px;
+.field{
+  margin-bottom:12px;
 }
 
-.pc-card {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 14px;
-  background: rgba(255,255,255,.92);
-  border: 1px solid rgba(18,24,39,.14);
-  border-radius: 8px;
-  padding: 14px;
-  box-shadow: 0 16px 38px rgba(16,24,40,.12);
-  transition: transform .18s ease, box-shadow .18s ease;
+.field label{
+  display:block;
+  font-weight:800;
+  font-size:12px;
+  letter-spacing:.03em;
+  text-transform:uppercase;
+  opacity:.75;
+  margin-bottom:6px;
 }
 
-.pc-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 22px 48px rgba(15,23,42,.16);
+.field input,
+.field select,
+.field textarea{
+  width:100%;
+  padding:11px 13px;
+  border:1px solid var(--line, rgba(18,24,39,.18));
+  background:var(--surface, #fff);
+  color:inherit;
 }
 
-.pc-card-left {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.field textarea{
+  min-height:88px;
+  resize:vertical;
 }
 
-.pc-photo {
-  width: 140px;
-  height: 140px;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid rgba(18,24,39,.18);
+/* ---------- Tombol seragam ---------- */
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:12px 18px;
+  font-weight:900;
+  letter-spacing:.02em;
+  cursor:pointer;
+  border:none;
 }
 
-.pc-photo.placeholder {
-  background: #f3f4f6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: #667085;
-  font-weight: 900;
+.btn.small{
+  padding:8px 14px;
+  font-size:12px;
 }
 
-.pc-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* ---------- Badge/status seragam ---------- */
+.status{
+  display:inline-block;
+  padding:5px 12px;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.04em;
+  text-transform:uppercase;
 }
 
-.pc-card-title {
-  font-size: 16px;
-  font-weight: 1000;
-  color: #121827;
+/* ---------- Modal (dipakai oleh editReport() dkk) ---------- */
+#modal section.card,
+.modal-backdrop .card{
+  max-height:90vh;
+  overflow-y:auto;
+  box-shadow:0 24px 60px rgba(0,0,0,.35)!important;
 }
 
-.pc-card-meta {
-  font-size: 12px;
-  color: #667085;
-  font-weight: 900;
-}
-
-.pc-card-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  font-size: 12px;
-}
-
-.pc-stat {
-  color: #667085;
-  font-weight: 900;
-}
-
-.pc-stat strong {
-  color: #121827;
-  display: inline;
-  font-weight: 1000;
-}
-
-.pc-badge {
-  grid-column: 1 / -1;
-}
-
-.badge {
-  display: inline-block;
-  padding: 5px 9px;
-  border: 1px solid rgba(18,24,39,.18);
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 1000;
-  background: #e5e7eb;
-  color: #121827;
-}
-
-.badge-active {
-  background: #d8f8e4 !important;
-  color: #11623b !important;
-}
-
-.badge-released {
-  background: #dce8ff !important;
-  color: #234ea0 !important;
-}
-
-.badge-wanted {
-  background: #ffd6dc !important;
-  color: #8b1d2c !important;
-}
-
-.badge-cleared {
-  background: #d9fbe8 !important;
-  color: #166534 !important;
-}
-
-.badge-unknown {
-  background: #f3f4f6 !important;
-  color: #667085 !important;
-}
-
-.pc-card-actions {
-  margin-top: auto;
-  display: flex;
-  gap: 10px;
-}
-
-.pc-card-actions .btn {
-  margin: 0 !important;
-  width: auto;
-  padding: 9px 12px;
-  font-size: 12px;
-}
-
-.pc-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.55);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 18px;
-  overflow: auto;
-}
-
-.pc-modal-panel {
-  position: relative;
-  width: 100%;
-  max-width: 900px;
-  background: rgba(255,255,255,.94);
-  border: 1px solid rgba(18,24,39,.14);
-  border-radius: 8px;
-  box-shadow: 0 22px 60px rgba(0,0,0,.22);
-  padding: 20px;
-  animation: popIn .25s ease both;
-}
-
-.pc-modal-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: transparent;
-  border: none;
-  font-size: 28px;
-  cursor: pointer;
-  color: #667085;
-  transition: color .18s ease;
-}
-
-.pc-modal-close:hover {
-  color: #121827;
-}
-
-.pc-detail {
-  display: grid;
-  gap: 14px;
-}
-
-.pc-detail-header {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 14px;
-  align-items: start;
-}
-
-.pc-detail-photo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.pc-detail-info {
-  display: grid;
-  gap: 8px;
-}
-
-.pc-detail-info h3 {
-  margin: 0 0 10px;
-  font-size: 20px;
-  font-weight: 1000;
-}
-
-.pc-detail-info div {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 10px;
-  align-items: center;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.pc-label {
-  color: #667085;
-  font-weight: 900;
-  font-size: 12px;
-}
-
-.pc-detail-info strong {
-  color: #121827;
-  font-weight: 1000;
-}
-
-.pc-table-wrap {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.pc-table {
-  width: 100%;
-  border-collapse: collapse;
-  border: 1px solid rgba(18,24,39,.14);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.pc-table th,
-.pc-table td {
-  border-bottom: 1px solid rgba(18,24,39,.10);
-  padding: 12px;
-  font-size: 12px;
-  text-align: left;
-  vertical-align: top;
-  background: #fff;
-}
-
-.pc-table th {
-  background: linear-gradient(135deg,#182238,#101827);
-  color: #fff;
-  font-weight: 1000;
-  white-space: nowrap;
-}
-
-.pc-table td {
-  color: #121827;
-}
-
-.pc-table .badge {
-  white-space: nowrap;
-}
-
-@media(max-width:980px) {
-  .pc-search-row {
-    grid-template-columns: 1fr;
+/* ---------- Table responsif tetap rapi di mobile ---------- */
+@media(max-width:640px){
+  .table thead{display:none;}
+  .table,
+  .table tbody,
+  .table tr,
+  .table td{display:block;width:100%;}
+  .table tr{
+    margin-bottom:12px;
+    border:1px solid var(--line, rgba(18,24,39,.18));
+    border-radius:var(--radius-sm, 10px);
+    padding:10px;
   }
-
-  .pc-card {
-    grid-template-columns: 1fr;
-  }
-
-  .pc-detail-header {
-    grid-template-columns: 1fr;
-  }
-
-  .pc-detail-info div {
-    grid-template-columns: 1fr;
-  }
-
-  .pc-modal-panel {
-    padding: 16px;
+  .table td{
+    padding:6px 4px;
+    border:none!important;
   }
 }
 
-@media(max-width:680px) {
-  .pc-search-row {
-    grid-template-columns: 1fr;
-  }
-
-  .pc-card {
-    grid-template-columns: 1fr;
-  }
-
-  .pc-photo {
-    width: 100%;
-    height: 160px;
-  }
-
-  .pc-card-stats {
-    grid-template-columns: 1fr;
-  }
-
-  .pc-detail-photo img {
-    width: 100% !important;
-    height: auto !important;
-  }
-
-  .pc-table {
-    min-width: 600px;
-  }
+/* ---------- Empty state seragam ---------- */
+.empty{
+  text-align:center;
+  padding:32px 16px;
+  opacity:.65;
+  font-weight:700;
 }
 
-html[data-theme="dark"] .pc-modal-panel,
-html[data-theme="dark"] .pc-card,
-html[data-theme="dark"] .pc-input {
-  background: rgba(15,23,42,.92) !important;
-  color: #e5edff !important;
+
+/* ============================================================
+   PERSONAL CHARGES
+   ============================================================ */
+
+.charges-search-card .charges-search-bar{
+  display:flex;
+  gap:10px;
+  margin-top:12px;
+  flex-wrap:wrap;
 }
 
-html[data-theme="dark"] .pc-card-title,
-html[data-theme="dark"] .pc-detail-info strong {
-  color: #e5edff !important;
+.charges-search-bar input{
+  flex:1;
+  min-width:220px;
 }
 
-html[data-theme="dark"] .pc-card-meta,
-html[data-theme="dark"] .pc-stat,
-html[data-theme="dark"] .pc-label,
-html[data-theme="dark"] .pc-input::placeholder {
-  color: #94a3b8 !important;
+.charges-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:14px;
+  padding:18px;
 }
 
-html[data-theme="dark"] .pc-table th {
-  background: linear-gradient(135deg,#0f172a,#051a3d) !important;
+.charge-card{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  text-align:left;
+  background:var(--surface, #fff);
+  border:1px solid var(--line, rgba(18,24,39,.16));
+  border-radius:var(--radius, 12px);
+  padding:14px;
+  cursor:pointer;
+  box-shadow:var(--soft-shadow, 0 6px 16px rgba(16,24,40,.08));
+  transition:transform .15s ease,box-shadow .15s ease;
 }
 
-html[data-theme="dark"] .pc-table,
-html[data-theme="dark"] .pc-table td {
-  background: rgba(15,23,42,.92) !important;
-  color: #e5edff !important;
+.charge-card:hover{
+  transform:translateY(-3px);
+  box-shadow:var(--shadow, 0 16px 38px rgba(16,24,40,.14));
 }
 
-html[data-theme="dark"] .pc-input:focus {
-  box-shadow: 0 0 0 4px rgba(49,95,203,.20) !important;
+.charge-photo{
+  width:64px;
+  height:64px;
+  border-radius:14px;
+  object-fit:cover;
+  background:var(--surface-2, #f2f4f8);
+  border:1px solid var(--line, rgba(18,24,39,.16));
+  flex-shrink:0;
+}
+
+.charge-photo.big{
+  width:120px;
+  height:120px;
+  border-radius:18px;
+}
+
+.charge-card-body{
+  min-width:0;
+  flex:1;
+}
+
+.charge-card-body h3{
+  margin:0 0 4px;
+  font-size:15px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.charge-card-stats{
+  display:flex;
+  gap:10px;
+  margin:8px 0;
+  font-size:12px;
+  font-weight:800;
+  opacity:.8;
+}
+
+.charge-detail-head{
+  display:flex;
+  gap:20px;
+  align-items:flex-start;
+  flex-wrap:wrap;
+  margin:14px 0 6px;
+}
+
+.charge-detail-head h2{
+  margin:0 0 8px;
+}
+
+.charge-history{
+  display:grid;
+  gap:12px;
+  margin-top:10px;
+}
+
+.charge-history-item{
+  border-left:4px solid var(--blue, #2f66d0);
+}
+
+/* Badge status riwayat kriminal */
+.status.charge-ACTIVE{
+  background:var(--rose, #dc4f64);
+  color:#fff;
+}
+
+.status.charge-WANTED{
+  background:#b91c1c;
+  color:#fff;
+}
+
+.status.charge-RELEASED{
+  background:var(--teal, #14a690);
+  color:#fff;
+}
+
+.status.charge-CLEARED{
+  background:#64748b;
+  color:#fff;
+}
+
+html[data-theme="dark"] .charge-card{
+  background:var(--surface, #101827);
+  border-color:rgba(255,255,255,.12);
+}
+
+html[data-theme="dark"] .charge-photo{
+  background:#0b1220;
+  border-color:rgba(255,255,255,.12);
+}
+
+@media(max-width:640px){
+  .charges-grid{
+    grid-template-columns:1fr;
+    padding:10px;
+  }
+  .charge-detail-head{
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+  }
 }
