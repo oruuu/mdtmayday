@@ -3381,6 +3381,90 @@ async function loadPersonalCharges(){
   }
 }
 
+function citizenKey(r, payload = {}){
+  const id = String(r.citizen_id || payload.citizen_id || "").trim().toUpperCase();
+  if(id && id !== "-") return `ID:${id}`;
+  const phone = String(r.citizen_phone || payload.citizen_phone || "").trim();
+  if(phone && phone !== "-") return `PHONE:${phone}`;
+  const name = String(r.citizen_name || payload.suspect_name || payload.subject_info || "").trim().toUpperCase();
+  return `NAME:${name || "TANPA NAMA"}`;
+}
+
+function buildPersonalCharges(){
+  const map = new Map();
+
+  for(const r of S.charges){
+    const p = r.payload || {};
+    
+    // Mengambil data dari kolom baru hasil Generated Column SQL dengan fallback ke payload
+    const suspectName = r.citizen_name || p.suspect_name || p.subject_info || "TANPA NAMA";
+    const citizenId = r.citizen_id || p.citizen_id || "-";
+    const phone = r.citizen_phone || p.citizen_phone || "-";
+    const discordId = r.citizen_discord_id || p.citizen_discord_id || "-";
+    const chargeStatus = r.charge_status || p.charge_status || "ACTIVE";
+
+    const key = citizenKey(r, p);
+
+    if(!map.has(key)){
+      map.set(key, {
+        key,
+        nama_ic: suspectName,
+        citizen_id: citizenId,
+        phone: phone,
+        discord_id: discordId,
+        address: p.citizen_address || "-",
+        dob: p.citizen_dob || "-",
+        gender: p.citizen_gender || "-",
+        job: p.citizen_job || "-",
+        photo: p.citizen_photo || "",
+        last_status: chargeStatus,
+        last_arrest_at: r.created_at,
+        _latestAt: r.created_at,
+        history: []
+      });
+    }
+
+    const citizen = map.get(key);
+
+    if(new Date(r.created_at).getTime() >= new Date(citizen._latestAt).getTime()){
+      citizen._latestAt = r.created_at;
+      citizen.nama_ic = suspectName;
+      citizen.citizen_id = citizenId;
+      citizen.phone = phone;
+      citizen.discord_id = discordId;
+      citizen.last_status = chargeStatus;
+      citizen.last_arrest_at = r.created_at;
+    }
+
+    citizen.history.push({
+      id: r.id,
+      date: p.arrest_datetime || p.report_date || r.created_at,
+      report_number: `LP-${r.id}`,
+      officer: r.nama,
+      law: p.law || "-",
+      sentence: p.sentence || p.duration || "-",
+      fine: p.fine || "-",
+      evidence: p.evidence_type || "-",
+      status: chargeStatus,
+      note: p.evidence_desc || p.summary || "-",
+      created_at: r.created_at
+    });
+  }
+
+  return [...map.values()].map(c => {
+    const history = c.history.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    return {
+      ...c,
+      arrest_count: history.length,
+      case_count: new Set(history.map(h => h.law)).size,
+      history
+    };
+  }).sort((a,b) => new Date(b.last_arrest_at || 0) - new Date(a.last_arrest_at || 0));
+}
+
+
+
+
 function citizenKey(payload = {}){
   const id = String(payload.citizen_id || "").trim().toUpperCase();
   if(id) return `ID:${id}`;
